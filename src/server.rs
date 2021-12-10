@@ -1,6 +1,6 @@
 use crate::{app::App, hash::Hash};
-use ethers::prelude::U256;
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
+use ethers::prelude::U256;
 use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
 use futures::Future;
 use hyper::{
@@ -47,8 +47,8 @@ const CONTENT_JSON: &str = "application/json";
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubmitProofRequest {
-    pub_key: String,
-    proof: [String; 8],
+    pub_key:         String,
+    proof:           [String; 8],
     nullifiers_hash: String,
 }
 
@@ -122,7 +122,10 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
                 let app = app.clone();
                 let proof = request.proof.map(|x| U256::from_dec_str(&x).unwrap());
                 let nullifiers_hash = U256::from_dec_str(&request.nullifiers_hash).unwrap();
-                async move { app.submit_proof(request.pub_key, proof, nullifiers_hash).await }
+                async move {
+                    app.submit_proof(request.pub_key, proof, nullifiers_hash)
+                        .await
+                }
             })
             .await
         }

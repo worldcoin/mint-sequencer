@@ -5,11 +5,13 @@ use crate::hash::Hash;
 use ethers::{
     core::k256::ecdsa::SigningKey,
     middleware::{NonceManagerMiddleware, SignerMiddleware},
+    prelude::{Bytes, U256},
     providers::{Http, Middleware, Provider},
     signers::{LocalWallet, Signer, Wallet},
-    types::Address, utils::keccak256, prelude::{U256, Bytes},
+    types::Address,
+    utils::keccak256,
 };
-use eyre::{eyre, Result as EyreResult};
+use eyre::{bail, eyre, Result as EyreResult};
 use std::sync::Arc;
 use structopt::StructOpt;
 use tracing::info;
@@ -22,8 +24,7 @@ pub struct Options {
     pub ethereum_provider: Url,
 
     /// Semaphore contract address.
-    // #[structopt(long, env, default_value = "3F3D3369214C9DF92579304cf7331A05ca1ABd73")]
-    #[structopt(long, env, default_value = "710725C0d9fcea67DE7bAeB035377d02E19c42Db")]
+    #[structopt(long, env, default_value = "3F3D3369214C9DF92579304cf7331A05ca1ABd73")]
     pub semaphore_address: Address,
 
     /// Private key used for transaction signing
@@ -35,7 +36,7 @@ pub struct Options {
     // NOTE: We abuse `Hash` here because it has the right `FromStr` implementation.
     pub signing_key: Hash,
 
-    #[structopt(long, env, default_value = "123")]
+    #[structopt(long, env, default_value = "123", parse(try_from_str = U256::from_dec_str))]
     pub external_nullifier: U256,
 
     /// If this module is being run within an integration test
@@ -52,10 +53,10 @@ type Provider2 = NonceManagerMiddleware<Provider1>;
 type ProviderStack = Provider2;
 
 pub struct Ethereum {
-    provider:  Arc<ProviderStack>,
-    semaphore: Semaphore<ProviderStack>,
+    provider:           Arc<ProviderStack>,
+    semaphore:          Semaphore<ProviderStack>,
     external_nullifier: U256,
-    test:      bool,
+    test:               bool,
 }
 
 impl Ethereum {
@@ -161,8 +162,43 @@ impl Ethereum {
         Ok(self.semaphore.root().call().await?)
     }
 
-    pub async fn pre_broadcast_check(&self, signal: Bytes, root: U256, proof: [U256; 8], nullifiers_hash: U256) -> EyreResult<bool> {
-        let signal_hash = keccak256(signal.clone());
-        Ok(self.semaphore.pre_broadcast_check(signal, proof, root, nullifiers_hash, signal_hash.into(), self.external_nullifier).call().await?)
+    pub fn hex_to_bytes(input: &str) -> EyreResult<Bytes> {
+        if input.len() >= 2 && &input[0..2] == "0x" {
+            let bytes: Vec<u8> = hex::decode(&input[2..])?;
+            Ok(bytes.into())
+        } else {
+            bail!("Expected 0x prefix")
+        }
+    }
+
+    pub fn pub_key_to_signals(pub_key: &str) -> EyreResult<(Bytes, U256)> {
+        let signal = Self::hex_to_bytes(pub_key)?;
+        let signal: Bytes = keccak256(signal).into();
+        let signal_hash = Self::hex_to_bytes(&signal.to_string())?;
+        let signal_hash: U256 = keccak256(signal_hash).into();
+        let signal_hash = signal_hash >> 8;
+        Ok((signal, signal_hash))
+    }
+
+    pub async fn pre_broadcast_check(
+        &self,
+        pub_key: String,
+        root: U256,
+        proof: [U256; 8],
+        nullifiers_hash: U256,
+    ) -> EyreResult<bool> {
+        let (signal, signal_hash) = Self::pub_key_to_signals(&pub_key)?;
+        Ok(self
+            .semaphore
+            .pre_broadcast_check(
+                signal,
+                proof,
+                root,
+                nullifiers_hash,
+                signal_hash,
+                self.external_nullifier,
+            )
+            .call()
+            .await?)
     }
 }

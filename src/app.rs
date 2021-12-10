@@ -5,7 +5,7 @@ use crate::{
     server::Error as ServerError,
 };
 use core::cmp::max;
-use ethers::{utils::keccak256, prelude::{U256, Bytes}};
+use ethers::prelude::U256;
 use eyre::Result as EyreResult;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -104,13 +104,17 @@ impl App {
     }
 
     /// # Errors
-    ///
-    pub async fn submit_proof(&self, pub_key: String, proof: [U256; 8], nullifiers_hash: U256) -> Result<(), ServerError> {
-        let signal = keccak256(pub_key);
-        // let byte = Bytes::from(signal);
+    pub async fn submit_proof(
+        &self,
+        pub_key: String,
+        proof: [U256; 8],
+        nullifiers_hash: U256,
+    ) -> Result<(), ServerError> {
         let root = self.ethereum.root().await?;
-        println!("Root {}", root);
-        let proof_valid = self.ethereum.pre_broadcast_check(signal.into(), root, proof, nullifiers_hash).await?;
+        let proof_valid = self
+            .ethereum
+            .pre_broadcast_check(pub_key, root, proof, nullifiers_hash)
+            .await?;
         println!("Proof valid {}", proof_valid);
         Ok(())
     }
