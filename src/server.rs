@@ -1,4 +1,5 @@
 use crate::{app::App, hash::Hash};
+use ethers::prelude::U256;
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
 use futures::Future;
@@ -43,16 +44,18 @@ static LATENCY: Lazy<Histogram> = Lazy::new(|| {
 });
 const CONTENT_JSON: &str = "application/json";
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubmitProofRequest {
+    pub_key: String,
+    proof: [String; 8],
+    nullifiers_hash: String,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InsertCommitmentRequest {
     identity_commitment: Hash,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InclusionProofRequest {
-    pub identity_index: usize,
 }
 
 #[derive(Debug, Error)]
@@ -114,10 +117,12 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
 
     // Route requests
     let result = match (request.method(), request.uri().path()) {
-        (&Method::POST, "/inclusionProof") => {
-            json_middleware(request, |request: InclusionProofRequest| {
+        (&Method::POST, "/submitProof") => {
+            json_middleware(request, |request: SubmitProofRequest| {
                 let app = app.clone();
-                async move { app.inclusion_proof(request.identity_index).await }
+                let proof = request.proof.map(|x| U256::from_dec_str(&x).unwrap());
+                let nullifiers_hash = U256::from_dec_str(&request.nullifiers_hash).unwrap();
+                async move { app.submit_proof(request.pub_key, proof, nullifiers_hash).await }
             })
             .await
         }

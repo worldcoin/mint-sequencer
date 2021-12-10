@@ -7,7 +7,7 @@ use ethers::{
     middleware::{NonceManagerMiddleware, SignerMiddleware},
     providers::{Http, Middleware, Provider},
     signers::{LocalWallet, Signer, Wallet},
-    types::Address,
+    types::Address, utils::keccak256, prelude::{U256, Bytes},
 };
 use eyre::{eyre, Result as EyreResult};
 use std::sync::Arc;
@@ -22,7 +22,8 @@ pub struct Options {
     pub ethereum_provider: Url,
 
     /// Semaphore contract address.
-    #[structopt(long, env, default_value = "3F3D3369214C9DF92579304cf7331A05ca1ABd73")]
+    // #[structopt(long, env, default_value = "3F3D3369214C9DF92579304cf7331A05ca1ABd73")]
+    #[structopt(long, env, default_value = "710725C0d9fcea67DE7bAeB035377d02E19c42Db")]
     pub semaphore_address: Address,
 
     /// Private key used for transaction signing
@@ -34,9 +35,12 @@ pub struct Options {
     // NOTE: We abuse `Hash` here because it has the right `FromStr` implementation.
     pub signing_key: Hash,
 
+    #[structopt(long, env, default_value = "123")]
+    pub external_nullifier: U256,
+
     /// If this module is being run within an integration test
     /// Short and long flags (-t, --test)
-    #[structopt(short, long)]
+    #[structopt(long, env)]
     pub test: bool,
 }
 
@@ -50,6 +54,7 @@ type ProviderStack = Provider2;
 pub struct Ethereum {
     provider:  Arc<ProviderStack>,
     semaphore: Semaphore<ProviderStack>,
+    external_nullifier: U256,
     test:      bool,
 }
 
@@ -107,6 +112,7 @@ impl Ethereum {
         Ok(Self {
             provider,
             semaphore,
+            external_nullifier: options.external_nullifier,
             test: options.test,
         })
     }
@@ -149,5 +155,14 @@ impl Ethereum {
             return Err(eyre!("tx dropped from mempool"));
         }
         Ok(())
+    }
+
+    pub async fn root(&self) -> EyreResult<U256> {
+        Ok(self.semaphore.root().call().await?)
+    }
+
+    pub async fn pre_broadcast_check(&self, signal: Bytes, root: U256, proof: [U256; 8], nullifiers_hash: U256) -> EyreResult<bool> {
+        let signal_hash = keccak256(signal.clone());
+        Ok(self.semaphore.pre_broadcast_check(signal, proof, root, nullifiers_hash, signal_hash.into(), self.external_nullifier).call().await?)
     }
 }
