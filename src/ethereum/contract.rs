@@ -10,3 +10,10 @@ abigen!(
     ]"#,
     event_derives(serde::Deserialize, serde::Serialize)
 );
+
+abigen!(
+    WalletClaims,
+    r#"[
+        function commit(uint256[8] calldata proof, bytes calldata pubKeyHash, uint256 batchId, uint256 commitmentIdx, uint256 transferIdx, uint256 _root, uint256 _nullifierHash) external
+    ]"#,
+);

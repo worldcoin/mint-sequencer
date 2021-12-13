@@ -1,6 +1,6 @@
 mod contract;
 
-use self::contract::{LeafInsertionFilter, Semaphore};
+use self::contract::{Semaphore, WalletClaims};
 use crate::hash::Hash;
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -27,6 +27,10 @@ pub struct Options {
     #[structopt(long, env, default_value = "3F3D3369214C9DF92579304cf7331A05ca1ABd73")]
     pub semaphore_address: Address,
 
+    /// WalletClaims contract address.
+    #[structopt(long, env, default_value = "3F3D3369214C9DF92579304cf7331A05ca1ABd73")]
+    pub wallet_claims_address: Address,
+
     /// Private key used for transaction signing
     #[structopt(
         long,
@@ -52,9 +56,11 @@ type Provider1 = SignerMiddleware<Provider0, Wallet<SigningKey>>;
 type Provider2 = NonceManagerMiddleware<Provider1>;
 type ProviderStack = Provider2;
 
+#[allow(dead_code)]
 pub struct Ethereum {
     provider:           Arc<ProviderStack>,
     semaphore:          Semaphore<ProviderStack>,
+    wallet_claims:      WalletClaims<ProviderStack>,
     external_nullifier: U256,
     test:               bool,
 }
@@ -108,54 +114,16 @@ impl Ethereum {
         // Connect to Contract
         let provider = Arc::new(provider);
         let semaphore = Semaphore::new(options.semaphore_address, provider.clone());
+        let wallet_claims = WalletClaims::new(options.wallet_claims_address, provider.clone());
         // TODO: Test contract connection by calling a view function.
 
         Ok(Self {
             provider,
             semaphore,
+            wallet_claims,
             external_nullifier: options.external_nullifier,
             test: options.test,
         })
-    }
-
-    pub async fn last_block(&self) -> EyreResult<u64> {
-        let block_number = self.provider.get_block_number().await?;
-        Ok(block_number.as_u64())
-    }
-
-    pub async fn fetch_events(&self, starting_block: u64) -> EyreResult<Vec<(usize, Hash)>> {
-        info!(starting_block, "Reading LeafInsertion events from chains");
-        // TODO: Some form of pagination.
-        // TODO: Register to the event stream and track it going forward.
-        let filter = self
-            .semaphore
-            .leaf_insertion_filter()
-            .from_block(starting_block);
-        let events: Vec<LeafInsertionFilter> = filter.query().await?;
-        info!(count = events.len(), "Read events");
-        let insertions = events
-            .iter()
-            .map(|event| (event.leaf_index.as_usize(), event.leaf.into()))
-            .collect::<Vec<_>>();
-        Ok(insertions)
-    }
-
-    pub async fn insert_identity(&self, commitment: &Hash) -> EyreResult<()> {
-        info!(%commitment, "Inserting identity in contract");
-        let tx = self.semaphore.insert_identity(commitment.into());
-        let pending_tx = if self.test {
-            // Our tests use ganache which doesn't support EIP-1559 transactions yet.
-            self.provider.send_transaction(tx.legacy().tx, None).await?
-        } else {
-            self.provider.send_transaction(tx.tx, None).await?
-        };
-        let receipt = pending_tx.await.map_err(|e| eyre!(e))?;
-        if receipt.is_none() {
-            // This should only happen if the tx is no longer in the mempool, meaning the tx
-            // was dropped.
-            return Err(eyre!("tx dropped from mempool"));
-        }
-        Ok(())
     }
 
     pub async fn root(&self) -> EyreResult<U256> {

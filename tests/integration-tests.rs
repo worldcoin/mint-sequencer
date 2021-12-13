@@ -9,46 +9,29 @@ use ethers::{
 };
 use eyre::{bail, Result as EyreResult};
 use hex_literal::hex;
-use hyper::{client::HttpConnector, Body, Client, Request};
-use mint_sequencer::{
-    app::App,
-    hash::Hash,
-    mimc_tree::MimcTree,
-    server::{self},
-    Options,
-};
+use hyper::Client;
+use mint_sequencer::{app::App, hash::Hash, server, Options};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::{
     fs::File,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
-    str::FromStr,
     sync::Arc,
     time::Duration,
 };
 use structopt::StructOpt;
-use tempfile::NamedTempFile;
 use tokio::{spawn, sync::broadcast};
 use url::{Host, Url};
-
-const TEST_LEAFS: &[&str] = &[
-    "0000000000000000000000000000000000000000000000000000000000000001",
-    "0000000000000000000000000000000000000000000000000000000000000002",
-];
 
 const GANACHE_DEFAULT_WALLET_KEY: Hash = Hash(hex!(
     "1ce6a4cc4c9941a4781349f988e129accdc35a55bb3d5b1a7b342bc2171db484"
 ));
 
 #[tokio::test]
-async fn insert_identity_and_proofs() {
+async fn submit_proofs() {
     let mut options = Options::from_iter_safe(&[""]).expect("Failed to create options");
     options.server.server = Url::parse("http://127.0.0.1:0/").expect("Failed to parse URL");
 
-    let temp_commitments_file = NamedTempFile::new().expect("Failed to create named temp file");
-    options.app.storage_file = temp_commitments_file.path().to_path_buf();
-
-    // let (shutdown, _) = broadcast::channel(1);
+    let (shutdown, _) = broadcast::channel(1);
 
     let (ganache, semaphore_address) = spawn_mock_chain()
         .await
@@ -60,148 +43,15 @@ async fn insert_identity_and_proofs() {
     options.app.ethereum.semaphore_address = semaphore_address;
     options.app.ethereum.signing_key = GANACHE_DEFAULT_WALLET_KEY;
 
-    // let local_addr = spawn_app(options.clone(), shutdown.clone())
-    //     .await
-    //     .expect("Failed to spawn app.");
+    let local_addr = spawn_app(options.clone(), shutdown.clone())
+        .await
+        .expect("Failed to spawn app.");
 
-    // let uri = "http://".to_owned() + &local_addr.to_string();
-    // let mut ref_tree = MimcTree::new(options.app.tree_depth,
-    // options.app.initial_leaf); let client = Client::new();
+    let _uri = "http://".to_owned() + &local_addr.to_string();
+    let _client = Client::new();
 
-    // test_inclusion_proof(&uri, &client, 0, &mut ref_tree,
-    // &options.app.initial_leaf).await; test_inclusion_proof(&uri, &client, 1,
-    // &mut ref_tree, &options.app.initial_leaf).await; test_insert_identity(&
-    // uri, &client, TEST_LEAFS[0], 0).await; test_inclusion_proof(
-    //     &uri,
-    //     &client,
-    //     0,
-    //     &mut ref_tree,
-    //     &Hash::from_str(TEST_LEAFS[0]).expect("Failed to parse Hash from test
-    // leaf 0"), )
-    // .await;
-    // test_insert_identity(&uri, &client, TEST_LEAFS[1], 1).await;
-    // test_inclusion_proof(
-    //     &uri,
-    //     &client,
-    //     1,
-    //     &mut ref_tree,
-    //     &Hash::from_str(TEST_LEAFS[1]).expect("Failed to parse Hash from test
-    // leaf 1"), )
-    // .await;
-    // test_inclusion_proof(&uri, &client, 2, &mut ref_tree,
-    // &options.app.initial_leaf).await;
-
-    // Shutdown app and spawn new one from file
-    // let _ = shutdown.send(()).expect("Failed to send shutdown signal");
-
-    // let local_addr = spawn_app(options.clone(), shutdown.clone())
-    //     .await
-    //     .expect("Failed to spawn app.");
-    // let uri = "http://".to_owned() + &local_addr.to_string();
-
-    // test_inclusion_proof(
-    //     &uri,
-    //     &client,
-    //     0,
-    //     &mut ref_tree,
-    //     &Hash::from_str(TEST_LEAFS[0]).expect("Failed to parse Hash from test
-    // leaf 0"), )
-    // .await;
-    // test_inclusion_proof(
-    //     &uri,
-    //     &client,
-    //     1,
-    //     &mut ref_tree,
-    //     &Hash::from_str(TEST_LEAFS[1]).expect("Failed to parse Hash from test
-    // leaf 1"), )
-    // .await;
-
-    temp_commitments_file
-        .close()
-        .expect("Failed to close temp file");
+    // TODO add relevant tests
 }
-
-// async fn test_inclusion_proof(
-//     uri: &str,
-//     client: &Client<HttpConnector>,
-//     leaf_index: usize,
-//     ref_tree: &mut MimcTree,
-//     leaf: &Hash,
-// ) {
-//     let body = construct_inclusion_proof_body(leaf_index);
-//     let req = Request::builder()
-//         .method("POST")
-//         .uri(uri.to_owned() + "/inclusionProof")
-//         .header("Content-Type", "application/json")
-//         .body(body)
-//         .expect("Failed to create inclusion proof hyper::Body");
-
-//     let mut response = client
-//         .request(req)
-//         .await
-//         .expect("Failed to execute request.");
-//     assert!(response.status().is_success());
-
-//     let bytes = hyper::body::to_bytes(response.body_mut())
-//         .await
-//         .expect("Failed to convert response body to bytes");
-//     let result = String::from_utf8(bytes.into_iter().collect())
-//         .expect("Could not parse response bytes to utf-8");
-
-//     ref_tree.set(leaf_index, *leaf);
-//     let proof = ref_tree.proof(leaf_index).expect("Ref tree malfunctioning");
-//     let serialized_proof =
-//         serde_json::to_string_pretty(&proof).expect("Proof serialization
-// failed");
-
-//     assert_eq!(result, serialized_proof);
-// }
-
-// async fn test_insert_identity(
-//     uri: &str,
-//     client: &Client<HttpConnector>,
-//     identity_commitment: &str,
-//     identity_index: usize,
-// ) {
-//     let body = construct_insert_identity_body(identity_commitment);
-//     let req = Request::builder()
-//         .method("POST")
-//         .uri(uri.to_owned() + "/insertIdentity")
-//         .header("Content-Type", "application/json")
-//         .body(body)
-//         .expect("Failed to create insert identity hyper::Body");
-
-//     let mut response = client
-//         .request(req)
-//         .await
-//         .expect("Failed to execute request.");
-//     assert!(response.status().is_success());
-
-//     let bytes = hyper::body::to_bytes(response.body_mut())
-//         .await
-//         .expect("Failed to convert response body to bytes");
-//     let result = String::from_utf8(bytes.into_iter().collect())
-//         .expect("Could not parse response bytes to utf-8");
-// }
-
-// fn construct_inclusion_proof_body(identity_index: usize) -> Body {
-//     Body::from(
-//         json!({
-//             "identityIndex": identity_index,
-//         })
-//         .to_string(),
-//     )
-// }
-
-// fn construct_insert_identity_body(identity_commitment: &str) -> Body {
-//     Body::from(
-//         json!({
-//             "identityCommitment": identity_commitment,
-
-//         })
-//         .to_string(),
-//     )
-// }
 
 async fn spawn_app(options: Options, shutdown: broadcast::Sender<()>) -> EyreResult<SocketAddr> {
     let app = Arc::new(App::new(options.app).await.expect("Failed to create App"));
