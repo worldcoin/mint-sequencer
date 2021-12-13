@@ -1,12 +1,12 @@
 image:
-  image: "ghcr.io/worldcoin/signup-sequencer"
+  image: "ghcr.io/worldcoin/mint-sequencer"
   tag: # Defaults to `v` + appVersion
   arch: amd64 # Either amd64 or arm64
   pullSecret:
 
 labels:
   component: # Defaults to name
-  partOf: protocol-signup
+  partOf: protocol-mint
   createdBy:
 
 environment: prod
