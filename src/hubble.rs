@@ -2,7 +2,7 @@ use ethers::prelude::U256;
 use eyre::{Result as EyreResult, bail};
 use hyper::{Client, client::HttpConnector, Method, Request, header, body::Buf};
 use serde::{Serialize, Deserialize};
-use serde_json::{Value, json};
+use serde_json::{Value, json, from_str};
 use structopt::StructOpt;
 
 use crate::server::Error;
@@ -33,6 +33,20 @@ pub struct CommitmentDetails {
     pub transfer_idx: U256,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UserState {
+    #[serde(rename="StateID")]
+    state_id: u32,
+    #[serde(rename="PubKeyID")]
+    pub_key_id: u32,
+    #[serde(rename="TokenID")]
+    token_id: String,
+    #[serde(rename="Balance")]
+    balance: U256,
+    #[serde(rename="Nonce")]
+    nonce: String,
+}
+
 impl Hubble {
     pub async fn new(options: Options) -> EyreResult<Self> {
         let client = Client::new();
@@ -44,8 +58,42 @@ impl Hubble {
         })
     }
 
+    pub async fn get_user_state(&self, state_id: u32) -> EyreResult<UserState> {
+        let body = json!({
+                "jsonrpc": "2.0",
+                "method": "hubble_getUserState",
+                "params": [
+                    state_id
+                ],
+                "id": 1u32,
+            }
+        );
+        println!("Body {}", body.to_string());
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(self.commander_uri.clone())
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(body.to_string().into())
+            ?;
+
+        let res = self.client.request(req).await?;
+
+        // asynchronously aggregate the chunks of the body
+        let body = hyper::body::aggregate(res).await?;
+
+        // try to parse as json with serde_json
+        let tx_result: Value = serde_json::from_reader(body.reader())?;
+
+        let user_state = tx_result.get("result").ok_or(Error::HubbleError)?;
+        let user_state = from_str::<UserState>(&user_state.to_string())?;
+        println!("User state {:?}", user_state);
+        Ok(user_state)
+    }
+
     pub async fn send_create_to_transfer(&self, pub_key: &str) -> EyreResult<String> {
-        // TODO fetch nonce
+        let user_state = self.get_user_state(self.from_state_id).await?;
+
         let body = json!({
                 "jsonrpc": "2.0",
                 "method": "hubble_sendTransaction",
@@ -55,7 +103,7 @@ impl Hubble {
                     "ToPublicKey": pub_key,
                     "Amount": self.airdrop_amount.to_string(),
                     "Fee": "1",
-                    "Nonce": "1",
+                    "Nonce": user_state.nonce,
                     "FromStateID": self.from_state_id,
                     "Signature": "0xABCD0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
                 }
@@ -63,7 +111,6 @@ impl Hubble {
                 "id": 1
             }
         );
-        println!("Body {}", body.to_string());
 
         let req = Request::builder()
             .method(Method::POST)
