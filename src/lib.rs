@@ -4,6 +4,7 @@
 pub mod app;
 mod ethereum;
 pub mod hash;
+mod hubble;
 pub mod server;
 mod utils;
 

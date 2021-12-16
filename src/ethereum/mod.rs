@@ -1,7 +1,7 @@
 mod contract;
 
 use self::contract::{Semaphore, WalletClaims};
-use crate::hash::Hash;
+use crate::{hash::Hash, hubble::CommitmentDetails};
 use ethers::{
     core::k256::ecdsa::SigningKey,
     middleware::{NonceManagerMiddleware, SignerMiddleware},
@@ -24,11 +24,11 @@ pub struct Options {
     pub ethereum_provider: Url,
 
     /// Semaphore contract address.
-    #[structopt(long, env, default_value = "3F3D3369214C9DF92579304cf7331A05ca1ABd73")]
+    #[structopt(long, env, default_value = "866F856550640A0b82739f5F7630Dc4d3D0E7A27")]
     pub semaphore_address: Address,
 
     /// WalletClaims contract address.
-    #[structopt(long, env, default_value = "3F3D3369214C9DF92579304cf7331A05ca1ABd73")]
+    #[structopt(long, env, default_value = "2Fa809affA2035b10fd8e558f3F1bb27DA1d6263")]
     pub wallet_claims_address: Address,
 
     /// Private key used for transaction signing
@@ -45,8 +45,8 @@ pub struct Options {
 
     /// If this module is being run within an integration test
     /// Short and long flags (-t, --test)
-    #[structopt(long, env)]
-    pub test: bool,
+    #[structopt(long, parse(try_from_str), env, default_value = "true")]
+    pub eip1559: bool,
 }
 
 // Code out the provider stack in types
@@ -62,7 +62,7 @@ pub struct Ethereum {
     semaphore:          Semaphore<ProviderStack>,
     wallet_claims:      WalletClaims<ProviderStack>,
     external_nullifier: U256,
-    test:               bool,
+    eip1559:               bool,
 }
 
 impl Ethereum {
@@ -122,7 +122,7 @@ impl Ethereum {
             semaphore,
             wallet_claims,
             external_nullifier: options.external_nullifier,
-            test: options.test,
+            eip1559: options.eip1559,
         })
     }
 
@@ -150,7 +150,7 @@ impl Ethereum {
 
     pub async fn pre_broadcast_check(
         &self,
-        pub_key: String,
+        pub_key: &str,
         root: U256,
         proof: [U256; 8],
         nullifiers_hash: U256,
@@ -168,5 +168,42 @@ impl Ethereum {
             )
             .call()
             .await?)
+    }
+
+    pub async fn commit(
+        &self,
+        pub_key: &str,
+        root: U256,
+        proof: [U256; 8],
+        nullifiers_hash: U256,
+        commitment_details: CommitmentDetails,
+    ) -> EyreResult<()> {
+        info!(%pub_key, %root, %nullifiers_hash, "Committing to airdrop");
+        let (signal, _signal_hash) = Self::pub_key_to_signals(&pub_key)?;
+        let tx = self.wallet_claims.commit(
+            proof,
+            signal,
+            commitment_details.batch_id,
+            commitment_details.commitment_idx,
+            commitment_details.transfer_idx,
+            root,
+            nullifiers_hash
+        );
+
+        let pending_tx = if self.eip1559 {
+            self.provider.send_transaction(tx.tx, None).await?
+        } else {
+            // Our tests use ganache which doesn't support EIP-1559 transactions yet.
+            self.provider.send_transaction(tx.legacy().tx, None).await?
+        };
+
+        let receipt = pending_tx.await.map_err(|e| eyre!(e))?;
+        if receipt.is_none() {
+            // This should only happen if the tx is no longer in the mempool, meaning the tx
+            // was dropped.
+            return Err(eyre!("tx dropped from mempool"));
+        }
+
+        Ok(())
     }
 }

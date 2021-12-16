@@ -25,7 +25,7 @@ use url::{Host, Url};
 #[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
     /// API Server url
-    #[structopt(long, env = "SERVER", default_value = "http://127.0.0.1:8080/")]
+    #[structopt(long, env = "SERVER", default_value = "http://127.0.0.1:8081/")]
     pub server: Url,
 }
 
@@ -47,10 +47,17 @@ const CONTENT_JSON: &str = "application/json";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CreateToTransferRequest {
+    pub_key: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SubmitProofRequest {
     pub_key:         String,
     proof:           [String; 8],
     nullifiers_hash: String,
+    tx_hash: String,
 }
 
 #[derive(Debug, Error)]
@@ -61,6 +68,8 @@ pub enum Error {
     InvalidContentType,
     #[error("invalid serialization format")]
     InvalidSerialization(#[from] serde_json::Error),
+    #[error("hubble error")]
+    HubbleError,
     #[error(transparent)]
     Hyper(#[from] hyper::Error),
     #[error(transparent)]
@@ -113,13 +122,23 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
     // Route requests
     #[allow(clippy::match_single_binding)]
     let result = match (request.method(), request.uri().path()) {
+        (&Method::POST, "/sendCreateToTransfer") => {
+            json_middleware(request, |request: CreateToTransferRequest| {
+                let app = app.clone();
+                async move {
+                    app.send_create_to_transfer(&request.pub_key).await
+                }
+
+            })
+            .await
+        }
         (&Method::POST, "/submitProof") => {
             json_middleware(request, |request: SubmitProofRequest| {
                 let app = app.clone();
                 let proof = request.proof.map(|x| U256::from_dec_str(&x).unwrap());
                 let nullifiers_hash = U256::from_dec_str(&request.nullifiers_hash).unwrap();
                 async move {
-                    app.submit_proof(request.pub_key, proof, nullifiers_hash)
+                    app.submit_proof(&request.pub_key, proof, nullifiers_hash, &request.tx_hash)
                         .await
                 }
             })
