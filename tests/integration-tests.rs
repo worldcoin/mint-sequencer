@@ -10,8 +10,6 @@ use ethers::{
 use eyre::{bail, Result as EyreResult};
 use hex_literal::hex;
 use hyper::{client::HttpConnector, Body, Client, Request};
-use serde::{Deserialize, Serialize};
-use serde_json::json;
 use mint_sequencer::{
     app::App,
     hash::Hash,
@@ -19,6 +17,8 @@ use mint_sequencer::{
     server::{self, InclusionProofRequest},
     Options,
 };
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::{
     fs::File,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
