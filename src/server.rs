@@ -57,7 +57,7 @@ pub struct SubmitProofRequest {
     pub_key:         String,
     proof:           [String; 8],
     nullifiers_hash: String,
-    tx_hash: String,
+    tx_hash:         String,
 }
 
 #[derive(Debug, Error)]
@@ -125,10 +125,7 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
         (&Method::POST, "/sendCreateToTransfer") => {
             json_middleware(request, |request: CreateToTransferRequest| {
                 let app = app.clone();
-                async move {
-                    app.send_create_to_transfer(&request.pub_key).await
-                }
-
+                async move { app.send_create_to_transfer(&request.pub_key).await }
             })
             .await
         }

@@ -62,7 +62,7 @@ pub struct Ethereum {
     semaphore:          Semaphore<ProviderStack>,
     wallet_claims:      WalletClaims<ProviderStack>,
     external_nullifier: U256,
-    eip1559:               bool,
+    eip1559:            bool,
 }
 
 impl Ethereum {
@@ -155,7 +155,7 @@ impl Ethereum {
         proof: [U256; 8],
         nullifiers_hash: U256,
     ) -> EyreResult<bool> {
-        let (signal, signal_hash) = Self::pub_key_to_signals(&pub_key)?;
+        let (signal, signal_hash) = Self::pub_key_to_signals(pub_key)?;
         Ok(self
             .semaphore
             .pre_broadcast_check(
@@ -179,7 +179,7 @@ impl Ethereum {
         commitment_details: CommitmentDetails,
     ) -> EyreResult<()> {
         info!(%pub_key, %root, %nullifiers_hash, "Committing to airdrop");
-        let (signal, _signal_hash) = Self::pub_key_to_signals(&pub_key)?;
+        let (signal, _signal_hash) = Self::pub_key_to_signals(pub_key)?;
         let tx = self.wallet_claims.commit(
             proof,
             signal,
@@ -187,7 +187,7 @@ impl Ethereum {
             commitment_details.commitment_idx,
             commitment_details.transfer_idx,
             root,
-            nullifiers_hash
+            nullifiers_hash,
         );
 
         let pending_tx = if self.eip1559 {
