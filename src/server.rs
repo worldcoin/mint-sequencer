@@ -1,4 +1,4 @@
-use crate::{app::App, hash::Hash};
+use crate::app::App;
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
 use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
 use futures::Future;
@@ -6,11 +6,11 @@ use hyper::{
     body::Buf,
     header,
     service::{make_service_fn, service_fn},
-    Body, Method, Request, Response, Server, StatusCode,
+    Body, Request, Response, Server, StatusCode,
 };
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     sync::Arc,
@@ -41,19 +41,8 @@ static STATUS: Lazy<IntCounterVec> = Lazy::new(|| {
 static LATENCY: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!("api_latency_seconds", "The API latency in seconds.").unwrap()
 });
+#[allow(dead_code)]
 const CONTENT_JSON: &str = "application/json";
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InsertCommitmentRequest {
-    identity_commitment: Hash,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InclusionProofRequest {
-    pub identity_index: usize,
-}
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -61,8 +50,6 @@ pub enum Error {
     InvalidMethod,
     #[error("invalid content type")]
     InvalidContentType,
-    #[error("provided identity index out of bounds")]
-    IndexOutOfBounds,
     #[error("invalid serialization format")]
     InvalidSerialization(#[from] serde_json::Error),
     #[error(transparent)]
@@ -82,6 +69,7 @@ impl Error {
 
 /// Parse a [`Request<Body>`] as JSON using Serde and handle using the provided
 /// method.
+#[allow(dead_code)]
 async fn json_middleware<F, T, S, U>(
     request: Request<Body>,
     mut next: F,
@@ -106,28 +94,16 @@ where
     Ok(Response::new(Body::from(json)))
 }
 
-async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, hyper::Error> {
+#[allow(clippy::unused_async)]
+async fn route(request: Request<Body>, _app: Arc<App>) -> Result<Response<Body>, hyper::Error> {
     // Measure and log request
     let _timer = LATENCY.start_timer(); // Observes on drop
     REQUESTS.inc();
     trace!(url = %request.uri(), "Receiving request");
 
     // Route requests
+    #[allow(clippy::match_single_binding)]
     let result = match (request.method(), request.uri().path()) {
-        (&Method::POST, "/inclusionProof") => {
-            json_middleware(request, |request: InclusionProofRequest| {
-                let app = app.clone();
-                async move { app.inclusion_proof(request.identity_index).await }
-            })
-            .await
-        }
-        (&Method::POST, "/insertIdentity") => {
-            json_middleware(request, |request: InsertCommitmentRequest| {
-                let app = app.clone();
-                async move { app.insert_identity(&request.identity_commitment).await }
-            })
-            .await
-        }
         _ => Err(Error::InvalidMethod),
     };
     let response = result.unwrap_or_else(|err| err.to_response());
@@ -210,62 +186,17 @@ pub async fn bind_from_listener(
     Ok(())
 }
 
-#[cfg(test)]
-#[allow(unused_imports)]
-mod test {
-    use super::*;
-    use hyper::{body::to_bytes, Request, StatusCode};
-    use pretty_assertions::assert_eq;
-    use serde_json::json;
-
-    // TODO: Fix test
-    // #[tokio::test]
-    #[allow(dead_code)]
-    async fn test_inclusion_proof() {
-        let options = crate::app::Options::from_iter_safe(&[""]).unwrap();
-        let app = Arc::new(App::new(options).await.unwrap());
-        let body = Body::from(
-            json!({
-                "identityIndex": 0,
-            })
-            .to_string(),
-        );
-        let request = Request::builder()
-            .method("POST")
-            .uri("/inclusionProof")
-            .header("Content-Type", "application/json")
-            .body(body)
-            .unwrap();
-        let res = route(request, app).await.unwrap();
-        assert_eq!(res.status(), StatusCode::OK);
-        // TODO deserialize proof and compare results
-    }
-}
 #[cfg(feature = "bench")]
 #[allow(clippy::wildcard_imports, unused_imports)]
 pub mod bench {
     use super::*;
     use crate::bench::runtime;
-    use criterion::{black_box, Criterion};
-    use hyper::body::to_bytes;
+    use criterion::Criterion;
 
     pub fn group(_c: &mut Criterion) {
         //     bench_hello_world(c);
     }
 
     // fn bench_hello_world(c: &mut Criterion) {
-    //     let app = Arc::new(App::new(2));
-    //     let request = CommitmentRequest {
-    //         identity_commitment:
-    // "24C94355810D659EEAA9E0B9E21F831493B50574AA2D3205F0AAB779E2864623"
-    //             .to_string(),
-    //     };
-    //     c.bench_function("bench_insert_identity", |b| {
-    //         b.to_async(runtime()).iter(|| async {
-    //             let response =
-    // app.insert_identity(request.clone()).await.unwrap();             let
-    // bytes = to_bytes(response.into_body()).await.unwrap();
-    // drop(black_box(bytes));         });
-    //     });
     // }
 }
