@@ -3,7 +3,7 @@ use crate::{
     hubble::{self, Hubble},
     server::Error as ServerError,
 };
-use ethers::prelude::U256;
+use ethers::prelude::{U256, H256};
 use eyre::Result as EyreResult;
 use structopt::StructOpt;
 
@@ -45,7 +45,7 @@ impl App {
         pub_key: &str,
         proof: [U256; 8],
         nullifiers_hash: U256,
-        tx_hash: &str,
+        tx_hash: &H256,
     ) -> Result<(), ServerError> {
         let root = self.ethereum.root().await?;
         let proof_valid = self

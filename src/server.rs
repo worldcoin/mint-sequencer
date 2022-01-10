@@ -1,6 +1,6 @@
 use crate::app::App;
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
-use ethers::prelude::U256;
+use ethers::prelude::{U256, H256};
 use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
 use futures::Future;
 use hyper::{
@@ -14,7 +14,7 @@ use prometheus::{register_int_counter_vec, IntCounterVec};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
-    sync::Arc,
+    sync::Arc, str::FromStr,
 };
 use structopt::StructOpt;
 use thiserror::Error;
@@ -131,11 +131,13 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
         }
         (&Method::POST, "/submitProof") => {
             json_middleware(request, |request: SubmitProofRequest| {
+                // TODO fix unwraps
                 let app = app.clone();
                 let proof = request.proof.map(|x| U256::from_dec_str(&x).unwrap());
                 let nullifiers_hash = U256::from_dec_str(&request.nullifiers_hash).unwrap();
+                let tx_hash = H256::from_str(&request.tx_hash).unwrap();
                 async move {
-                    app.submit_proof(&request.pub_key, proof, nullifiers_hash, &request.tx_hash)
+                    app.submit_proof(&request.pub_key, proof, nullifiers_hash, &tx_hash)
                         .await
                 }
             })

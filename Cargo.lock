@@ -1801,6 +1801,7 @@ dependencies = [
  "pretty_assertions",
  "prometheus",
  "proptest",
+ "reqwest",
  "serde",
  "serde_json",
  "smallvec",

@@ -1,6 +1,8 @@
-use ethers::prelude::U256;
+use std::str::FromStr;
+
+use ethers::prelude::{U256, H256};
 use eyre::{bail, Result as EyreResult};
-use hyper::{body::Buf, client::HttpConnector, header, Client, Method, Request};
+use reqwest::{Url, Client, header::CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, json, Value};
 use structopt::StructOpt;
@@ -10,7 +12,7 @@ use crate::server::Error;
 #[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
     #[structopt(long, env, default_value = "http://localhost:8080")]
-    commander_uri: hyper::Uri,
+    commander_url: Url,
 
     #[structopt(long, env, default_value = "50")]
     airdrop_amount: u32,
@@ -20,8 +22,8 @@ pub struct Options {
 }
 
 pub struct Hubble {
-    client:         Client<HttpConnector>,
-    commander_uri:  hyper::Uri,
+    client:         Client,
+    commander_url:  Url,
     airdrop_amount: u32,
     from_state_id:  u32,
 }
@@ -49,10 +51,10 @@ pub struct UserState {
 
 impl Hubble {
     pub async fn new(options: Options) -> EyreResult<Self> {
-        let client = Client::new();
+        let client = reqwest::Client::new();
         Ok(Self {
             client,
-            commander_uri: options.commander_uri,
+            commander_url: options.commander_url,
             airdrop_amount: options.airdrop_amount,
             from_state_id: options.from_state_id,
         })
@@ -70,21 +72,12 @@ impl Hubble {
             }
         );
 
-        let req = Request::builder()
-            .method(Method::POST)
-            .uri(self.commander_uri.clone())
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(body.to_string().into())?;
+        let response = self.client.post(self.commander_url.clone()).body(body.to_string())
+            .header(CONTENT_TYPE, "application/json")
+            .send().await?;
+        let json_body: Value = response.json().await?;
 
-        let response = self.client.request(req).await?;
-
-        // asynchronously aggregate the chunks of the body
-        let body = hyper::body::aggregate(response).await?;
-
-        // try to parse as json with serde_json
-        let tx_result: Value = serde_json::from_reader(body.reader())?;
-
-        let user_state = tx_result.get("result").ok_or(Error::HubbleError)?;
+        let user_state = json_body.get("result").ok_or(Error::HubbleError)?;
         let user_state = from_str::<UserState>(&user_state.to_string())?;
         println!("User state {:?}", user_state);
         Ok(user_state)
@@ -112,23 +105,13 @@ impl Hubble {
             }
         );
 
-        let req = Request::builder()
-            .method(Method::POST)
-            .uri(self.commander_uri.clone())
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(body.to_string().into())?;
+        let response = self.client.post(self.commander_url.clone()).body(body.to_string())
+            .header(CONTENT_TYPE, "application/json").send().await?;
+        let json_body: Value = response.json().await?;
 
-        let response = self.client.request(req).await?;
-
-        // asynchronously aggregate the chunks of the body
-        let body = hyper::body::aggregate(response).await?;
-
-        // try to parse as json with serde_json
-        let tx_result: Value = serde_json::from_reader(body.reader())?;
-
-        let tx_hash = if let Some(tx_hash) = tx_result.get("result") {
+        let tx_hash = if let Some(tx_hash) = json_body.get("result") {
             Ok(tx_hash)
-        } else if let Some(error) = tx_result.get("error") {
+        } else if let Some(error) = json_body.get("error") {
             println!("Error {:?}", error);
             // TODO report error
             Err(Error::HubbleError)
@@ -140,12 +123,11 @@ impl Hubble {
     }
 
     /// # Errors
-    pub async fn get_transfer_data(&self, tx_hash: &str) -> EyreResult<CommitmentDetails> {
+    pub async fn get_transfer_data(&self, tx_hash: &H256) -> EyreResult<CommitmentDetails> {
         let (batch_id, commitment_idx) = self.get_transfer_by_hash(tx_hash).await?;
         let transfer_idx = self
             .get_transfer_idx(tx_hash, batch_id, commitment_idx)
             .await?;
-        println!("Transfer idx {}", transfer_idx);
 
         Ok(CommitmentDetails {
             batch_id:       U256::from(batch_id),
@@ -155,33 +137,21 @@ impl Hubble {
     }
 
     /// # Errors
-    pub async fn get_transfer_by_hash(&self, tx_hash: &str) -> EyreResult<(u64, u64)> {
+    pub async fn get_transfer_by_hash(&self, tx_hash: &H256) -> EyreResult<(u64, u64)> {
         let body: Value = json!({
             "jsonrpc":  "2.0",
             "method": "hubble_getTransaction",
             "params": [
-                tx_hash.replace("\"", "")
+                tx_hash
             ],
             "id": 1u32,
         });
 
-        let req = Request::builder()
-            .method(Method::POST)
-            .uri(self.commander_uri.clone())
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(body.to_string().into())?;
+        let response = self.client.post(self.commander_url.clone()).body(body.to_string())
+            .header(CONTENT_TYPE, "application/json").send().await?;
+        let json_body: Value = response.json().await?;
 
-        let response = self.client.request(req).await?;
-        println!("Res {:?}", response);
-
-        // asynchronously aggregate the chunks of the body
-        let body = hyper::body::aggregate(response).await?;
-
-        // try to parse as json with serde_json
-        let tx_result: Value = serde_json::from_reader(body.reader())?;
-        println!("Tx result {}", tx_result);
-
-        let response = tx_result.get("result").ok_or(Error::HubbleError)?;
+        let response = json_body.get("result").ok_or(Error::HubbleError)?;
         let status = response.get("Status").ok_or(Error::HubbleError)?;
         if status == "PENDING" {
             bail!("Pending tx")
@@ -202,7 +172,7 @@ impl Hubble {
     /// # Errors
     pub async fn get_transfer_idx(
         &self,
-        tx_hash: &str,
+        tx_hash: &H256,
         batch_id: u64,
         commitment_idx: u64,
     ) -> EyreResult<u64> {
@@ -216,21 +186,11 @@ impl Hubble {
             "id": 1u32,
         });
 
-        let req = Request::builder()
-            .method(Method::POST)
-            .uri(self.commander_uri.clone())
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(body.to_string().into())?;
+        let response = self.client.post(self.commander_url.clone()).body(body.to_string())
+            .header(CONTENT_TYPE, "application/json").send().await?;
+        let json_body: Value = response.json().await?;
 
-        let response = self.client.request(req).await?;
-
-        // asynchronously aggregate the chunks of the body
-        let body = hyper::body::aggregate(response).await?;
-
-        // try to parse as json with serde_json
-        let tx_result: Value = serde_json::from_reader(body.reader())?;
-
-        let response = tx_result.get("result").ok_or(Error::HubbleError)?;
+        let response = json_body.get("result").ok_or(Error::HubbleError)?;
         let status = response.get("Status").ok_or(Error::HubbleError)?;
         if status == "PENDING" {
             bail!("Tx pending")
@@ -239,8 +199,9 @@ impl Hubble {
         let tx_array = txs.as_array().ok_or(Error::HubbleError)?;
         for (i, tx) in tx_array.as_slice().iter().enumerate() {
             let hash = tx.get("Hash").ok_or(Error::HubbleError)?;
+            let hash = H256::from_str(&hash.to_string())?;
             println!("Comparing hash {} {}", i, hash);
-            if hash == tx_hash {
+            if hash == *tx_hash {
                 println!("Found {}", hash);
                 return Ok(i.try_into()?);
             }
