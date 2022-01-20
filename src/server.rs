@@ -1,16 +1,21 @@
-use crate::app::App;
+use crate::{
+    app::App,
+    ethereum::{BLSPubKey, CommitmentProof},
+};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
+use ethers::prelude::{H256, U256};
 use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
 use futures::Future;
 use hyper::{
     body::Buf,
     header,
     service::{make_service_fn, service_fn},
-    Body, Request, Response, Server, StatusCode,
+    Body, Method, Request, Response, Server, StatusCode,
 };
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::Value;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     sync::Arc,
@@ -24,7 +29,7 @@ use url::{Host, Url};
 #[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
     /// API Server url
-    #[structopt(long, env = "SERVER", default_value = "http://127.0.0.1:8080/")]
+    #[structopt(long, env = "SERVER", default_value = "http://127.0.0.1:8081/")]
     pub server: Url,
 }
 
@@ -44,6 +49,21 @@ static LATENCY: Lazy<Histogram> = Lazy::new(|| {
 #[allow(dead_code)]
 const CONTENT_JSON: &str = "application/json";
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateToTransferRequest {
+    pub_key: BLSPubKey,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubmitProofRequest {
+    pub_key:         BLSPubKey,
+    proof:           CommitmentProof,
+    nullifiers_hash: U256,
+    tx_hash:         H256,
+}
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("invalid method")]
@@ -52,10 +72,17 @@ pub enum Error {
     InvalidContentType,
     #[error("invalid serialization format")]
     InvalidSerialization(#[from] serde_json::Error),
+    #[error("HubbleError: `{0}`")]
+    HubbleError(String),
     #[error(transparent)]
     Hyper(#[from] hyper::Error),
     #[error(transparent)]
     Other(#[from] EyreError),
+}
+
+#[must_use]
+pub fn create_hubble_field_not_found_error(field: &str, value: &Value) -> String {
+    format!("Field: {} not found in serde value: {}", field, value)
 }
 
 impl Error {
@@ -95,7 +122,7 @@ where
 }
 
 #[allow(clippy::unused_async)]
-async fn route(request: Request<Body>, _app: Arc<App>) -> Result<Response<Body>, hyper::Error> {
+async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, hyper::Error> {
     // Measure and log request
     let _timer = LATENCY.start_timer(); // Observes on drop
     REQUESTS.inc();
@@ -104,6 +131,28 @@ async fn route(request: Request<Body>, _app: Arc<App>) -> Result<Response<Body>,
     // Route requests
     #[allow(clippy::match_single_binding)]
     let result = match (request.method(), request.uri().path()) {
+        (&Method::POST, "/sendCreateToTransfer") => {
+            json_middleware(request, |request: CreateToTransferRequest| {
+                let app = app.clone();
+                async move { app.send_create_to_transfer(&request.pub_key).await }
+            })
+            .await
+        }
+        (&Method::POST, "/submitProof") => {
+            json_middleware(request, |request: SubmitProofRequest| {
+                let app = app.clone();
+                async move {
+                    app.submit_proof(
+                        &request.pub_key,
+                        request.proof,
+                        request.nullifiers_hash,
+                        &request.tx_hash,
+                    )
+                    .await
+                }
+            })
+            .await
+        }
         _ => Err(Error::InvalidMethod),
     };
     let response = result.unwrap_or_else(|err| err.to_response());

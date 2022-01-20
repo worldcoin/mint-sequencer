@@ -10,7 +10,8 @@ spec:
   selector:
     app: {{ include "mychart.fullname" . }}
   ports:
-    - protocol: TCP
+    - name: api
+      protocol: TCP
       port: 80
-      targetPort: http
+      targetPort: api
 {{- end }}

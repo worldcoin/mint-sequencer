@@ -17,6 +17,7 @@
         "mmaped",
         "proptest",
         "Remco",
+        "reqwest",
         "rngs",
         "rustfmt",
         "sigterm",
