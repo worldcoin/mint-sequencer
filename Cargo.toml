@@ -30,7 +30,7 @@ path = "criterion.rs"
 required-features = [ "bench", "proptest" ]
 
 [dependencies]
-color-eyre = "0.5"
+color-eyre = "0.6"
 criterion = { version = "0.3", optional = true, features = [ "async_tokio" ] }
 ethers = "0.6"
 eyre = "0.6"
@@ -38,7 +38,7 @@ fixed-hash = "0.7.0"
 futures = "0.3"
 hex = "0.4.3"
 hex-literal = "0.3"
-hyper = { version = "0.14", features = [ "server", "tcp", "http2" ] }
+hyper = { version = "0.14", features = [ "server", "tcp", "http1", "http2" ] }
 impl-serde = "0.3.2"
 itertools = "0.10"
 mimalloc = { version = "0.1", default-features = false, optional = true }
