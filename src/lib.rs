@@ -1,5 +1,8 @@
 #![doc = include_str!("../Readme.md")]
 #![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
+// TODO: `fixed-hash`'s `construct_fixed_hash` used in `ethereum/mod.rs` causes issues.
+// Explore ways to allow this within the macro without making it globally allowed.
+#![allow(clippy::expl_impl_clone_on_copy)]
 
 pub mod app;
 mod ethereum;

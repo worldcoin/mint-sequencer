@@ -12,6 +12,8 @@ use ethers::{
     utils::keccak256,
 };
 use eyre::{bail, eyre, Result as EyreResult};
+use fixed_hash::construct_fixed_hash;
+use impl_serde::impl_fixed_hash_serde;
 use std::sync::Arc;
 use structopt::StructOpt;
 use tracing::info;
@@ -24,11 +26,11 @@ pub struct Options {
     pub ethereum_provider: Url,
 
     /// Semaphore contract address.
-    #[structopt(long, env, default_value = "866F856550640A0b82739f5F7630Dc4d3D0E7A27")]
+    #[structopt(long, env, default_value = "07389715AE1f0a891fbA82e65099F6a3FA7dA593")]
     pub semaphore_address: Address,
 
     /// WalletClaims contract address.
-    #[structopt(long, env, default_value = "2Fa809affA2035b10fd8e558f3F1bb27DA1d6263")]
+    #[structopt(long, env, default_value = "E97bF95177738733e5CE1f9ae1933a73b6f158D4")]
     pub wallet_claims_address: Address,
 
     /// Private key used for transaction signing
@@ -55,6 +57,14 @@ type Provider0 = Provider<Http>;
 type Provider1 = SignerMiddleware<Provider0, Wallet<SigningKey>>;
 type Provider2 = NonceManagerMiddleware<Provider1>;
 type ProviderStack = Provider2;
+
+pub type CommitmentProof = [U256; 8];
+
+construct_fixed_hash! {
+    pub struct BLSPubKey(128);
+}
+
+impl_fixed_hash_serde!(BLSPubKey, 128);
 
 #[allow(dead_code)]
 pub struct Ethereum {
@@ -139,9 +149,8 @@ impl Ethereum {
         }
     }
 
-    pub fn pub_key_to_signals(pub_key: &str) -> EyreResult<(Bytes, U256)> {
-        let signal = Self::hex_to_bytes(pub_key)?;
-        let signal: Bytes = keccak256(signal).into();
+    pub fn pub_key_to_signals(pub_key: &BLSPubKey) -> EyreResult<(Bytes, U256)> {
+        let signal: Bytes = keccak256(pub_key.0).into();
         let signal_hash = Self::hex_to_bytes(&signal.to_string())?;
         let signal_hash: U256 = keccak256(signal_hash).into();
         let signal_hash = signal_hash >> 8;
@@ -150,9 +159,9 @@ impl Ethereum {
 
     pub async fn pre_broadcast_check(
         &self,
-        pub_key: &str,
+        pub_key: &BLSPubKey,
         root: U256,
-        proof: [U256; 8],
+        proof: CommitmentProof,
         nullifiers_hash: U256,
     ) -> EyreResult<bool> {
         let (signal, signal_hash) = Self::pub_key_to_signals(pub_key)?;
@@ -172,9 +181,9 @@ impl Ethereum {
 
     pub async fn commit(
         &self,
-        pub_key: &str,
+        pub_key: &BLSPubKey,
         root: U256,
-        proof: [U256; 8],
+        proof: CommitmentProof,
         nullifiers_hash: U256,
         commitment_details: CommitmentDetails,
     ) -> EyreResult<()> {

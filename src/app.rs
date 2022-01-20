@@ -1,9 +1,9 @@
 use crate::{
-    ethereum::{self, Ethereum},
+    ethereum::{self, BLSPubKey, CommitmentProof, Ethereum},
     hubble::{self, Hubble},
     server::Error as ServerError,
 };
-use ethers::prelude::{U256, H256};
+use ethers::prelude::{H256, U256};
 use eyre::Result as EyreResult;
 use structopt::StructOpt;
 
@@ -34,7 +34,10 @@ impl App {
     }
 
     /// # Errors
-    pub async fn send_create_to_transfer(&self, pub_key: &str) -> Result<String, ServerError> {
+    pub async fn send_create_to_transfer(
+        &self,
+        pub_key: &BLSPubKey,
+    ) -> Result<String, ServerError> {
         let tx_hash = self.hubble.send_create_to_transfer(pub_key).await?;
         Ok(tx_hash)
     }
@@ -42,8 +45,8 @@ impl App {
     /// # Errors
     pub async fn submit_proof(
         &self,
-        pub_key: &str,
-        proof: [U256; 8],
+        pub_key: &BLSPubKey,
+        proof: CommitmentProof,
         nullifiers_hash: U256,
         tx_hash: &H256,
     ) -> Result<(), ServerError> {
@@ -54,7 +57,6 @@ impl App {
             .await?;
         println!("Proof valid {}", proof_valid);
         let commitment_details = self.hubble.get_transfer_data(tx_hash).await?;
-        println!("Commitment details {:?}", commitment_details);
 
         self.ethereum
             .commit(pub_key, root, proof, nullifiers_hash, commitment_details)

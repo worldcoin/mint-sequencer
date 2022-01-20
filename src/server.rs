@@ -1,6 +1,9 @@
-use crate::app::App;
+use crate::{
+    app::App,
+    ethereum::{BLSPubKey, CommitmentProof},
+};
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
-use ethers::prelude::{U256, H256};
+use ethers::prelude::{H256, U256};
 use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
 use futures::Future;
 use hyper::{
@@ -12,9 +15,10 @@ use hyper::{
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::Value;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
-    sync::Arc, str::FromStr,
+    sync::Arc,
 };
 use structopt::StructOpt;
 use thiserror::Error;
@@ -48,16 +52,16 @@ const CONTENT_JSON: &str = "application/json";
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateToTransferRequest {
-    pub_key: String,
+    pub_key: BLSPubKey,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubmitProofRequest {
-    pub_key:         String,
-    proof:           [String; 8],
-    nullifiers_hash: String,
-    tx_hash:         String,
+    pub_key:         BLSPubKey,
+    proof:           CommitmentProof,
+    nullifiers_hash: U256,
+    tx_hash:         H256,
 }
 
 #[derive(Debug, Error)]
@@ -68,12 +72,17 @@ pub enum Error {
     InvalidContentType,
     #[error("invalid serialization format")]
     InvalidSerialization(#[from] serde_json::Error),
-    #[error("hubble error")]
-    HubbleError,
+    #[error("HubbleError: `{0}`")]
+    HubbleError(String),
     #[error(transparent)]
     Hyper(#[from] hyper::Error),
     #[error(transparent)]
     Other(#[from] EyreError),
+}
+
+#[must_use]
+pub fn create_hubble_field_not_found_error(field: &str, value: &Value) -> String {
+    format!("Field: {} not found in serde value: {}", field, value)
 }
 
 impl Error {
@@ -131,14 +140,15 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
         }
         (&Method::POST, "/submitProof") => {
             json_middleware(request, |request: SubmitProofRequest| {
-                // TODO fix unwraps
                 let app = app.clone();
-                let proof = request.proof.map(|x| U256::from_dec_str(&x).unwrap());
-                let nullifiers_hash = U256::from_dec_str(&request.nullifiers_hash).unwrap();
-                let tx_hash = H256::from_str(&request.tx_hash).unwrap();
                 async move {
-                    app.submit_proof(&request.pub_key, proof, nullifiers_hash, &tx_hash)
-                        .await
+                    app.submit_proof(
+                        &request.pub_key,
+                        request.proof,
+                        request.nullifiers_hash,
+                        &request.tx_hash,
+                    )
+                    .await
                 }
             })
             .await

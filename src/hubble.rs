@@ -1,13 +1,16 @@
 use std::str::FromStr;
 
-use ethers::prelude::{U256, H256};
+use ethers::prelude::{H256, U256};
 use eyre::{bail, Result as EyreResult};
-use reqwest::{Url, Client, header::CONTENT_TYPE};
+use reqwest::{header::CONTENT_TYPE, Client, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, json, Value};
 use structopt::StructOpt;
 
-use crate::server::Error;
+use crate::{
+    ethereum::BLSPubKey,
+    server::{create_hubble_field_not_found_error, Error},
+};
 
 #[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
@@ -72,19 +75,24 @@ impl Hubble {
             }
         );
 
-        let response = self.client.post(self.commander_url.clone()).body(body.to_string())
+        let response = self
+            .client
+            .post(self.commander_url.clone())
+            .body(body.to_string())
             .header(CONTENT_TYPE, "application/json")
-            .send().await?;
+            .send()
+            .await?;
         let json_body: Value = response.json().await?;
 
-        let user_state = json_body.get("result").ok_or(Error::HubbleError)?;
+        let user_state = json_body.get("result").ok_or_else(|| {
+            Error::HubbleError(create_hubble_field_not_found_error("result", &json_body))
+        })?;
         let user_state = from_str::<UserState>(&user_state.to_string())?;
-        println!("User state {:?}", user_state);
         Ok(user_state)
     }
 
     /// # Errors
-    pub async fn send_create_to_transfer(&self, pub_key: &str) -> EyreResult<String> {
+    pub async fn send_create_to_transfer(&self, pub_key: &BLSPubKey) -> EyreResult<String> {
         let user_state = self.get_user_state(self.from_state_id).await?;
 
         let body = json!({
@@ -105,18 +113,23 @@ impl Hubble {
             }
         );
 
-        let response = self.client.post(self.commander_url.clone()).body(body.to_string())
-            .header(CONTENT_TYPE, "application/json").send().await?;
+        let response = self
+            .client
+            .post(self.commander_url.clone())
+            .body(body.to_string())
+            .header(CONTENT_TYPE, "application/json")
+            .send()
+            .await?;
         let json_body: Value = response.json().await?;
 
         let tx_hash = if let Some(tx_hash) = json_body.get("result") {
             Ok(tx_hash)
         } else if let Some(error) = json_body.get("error") {
-            println!("Error {:?}", error);
-            // TODO report error
-            Err(Error::HubbleError)
+            Err(Error::HubbleError(error.to_string()))
         } else {
-            Err(Error::HubbleError)
+            Err(Error::HubbleError(create_hubble_field_not_found_error(
+                "error", &json_body,
+            )))
         }?;
 
         Ok(tx_hash.to_string())
@@ -147,25 +160,51 @@ impl Hubble {
             "id": 1u32,
         });
 
-        let response = self.client.post(self.commander_url.clone()).body(body.to_string())
-            .header(CONTENT_TYPE, "application/json").send().await?;
+        let response = self
+            .client
+            .post(self.commander_url.clone())
+            .body(body.to_string())
+            .header(CONTENT_TYPE, "application/json")
+            .send()
+            .await?;
         let json_body: Value = response.json().await?;
 
-        let response = json_body.get("result").ok_or(Error::HubbleError)?;
-        let status = response.get("Status").ok_or(Error::HubbleError)?;
+        let response = json_body.get("result").ok_or_else(|| {
+            Error::HubbleError(create_hubble_field_not_found_error("result", &json_body))
+        })?;
+        let status = response.get("Status").ok_or_else(|| {
+            Error::HubbleError(create_hubble_field_not_found_error("Status", response))
+        })?;
         if status == "PENDING" {
             bail!("Pending tx")
         }
-        let tx = response.get("Transaction").ok_or(Error::HubbleError)?;
-        let commitment_id = tx.get("CommitmentID").ok_or(Error::HubbleError)?;
+        let tx = response.get("Transaction").ok_or_else(|| {
+            Error::HubbleError(create_hubble_field_not_found_error("Transaction", response))
+        })?;
+        let commitment_id = tx.get("CommitmentID").ok_or_else(|| {
+            Error::HubbleError(create_hubble_field_not_found_error("CommitmentID", tx))
+        })?;
         let (batch_id, commitment_idx) = (
-            commitment_id.get("BatchID").ok_or(Error::HubbleError)?,
-            commitment_id
-                .get("IndexInBatch")
-                .ok_or(Error::HubbleError)?,
+            commitment_id.get("BatchID").ok_or_else(|| {
+                Error::HubbleError(create_hubble_field_not_found_error(
+                    "BatchID",
+                    commitment_id,
+                ))
+            })?,
+            commitment_id.get("IndexInBatch").ok_or_else(|| {
+                Error::HubbleError(create_hubble_field_not_found_error(
+                    "IndexInBatch",
+                    commitment_id,
+                ))
+            })?,
         );
         let batch_id = batch_id.to_string().replace("\"", "").parse::<u64>()?;
-        let commitment_idx = commitment_idx.as_u64().ok_or(Error::HubbleError)?;
+        let commitment_idx = commitment_idx.as_u64().ok_or_else(|| {
+            Error::HubbleError(format!(
+                "Cannot parse `commitment_idx`: {} as u64",
+                commitment_idx
+            ))
+        })?;
         Ok((batch_id, commitment_idx))
     }
 
@@ -186,23 +225,39 @@ impl Hubble {
             "id": 1u32,
         });
 
-        let response = self.client.post(self.commander_url.clone()).body(body.to_string())
-            .header(CONTENT_TYPE, "application/json").send().await?;
+        let response = self
+            .client
+            .post(self.commander_url.clone())
+            .body(body.to_string())
+            .header(CONTENT_TYPE, "application/json")
+            .send()
+            .await?;
         let json_body: Value = response.json().await?;
 
-        let response = json_body.get("result").ok_or(Error::HubbleError)?;
-        let status = response.get("Status").ok_or(Error::HubbleError)?;
+        let response = json_body.get("result").ok_or_else(|| {
+            Error::HubbleError(create_hubble_field_not_found_error("result", &json_body))
+        })?;
+        let status = response.get("Status").ok_or_else(|| {
+            Error::HubbleError(create_hubble_field_not_found_error("Status", response))
+        })?;
         if status == "PENDING" {
             bail!("Tx pending")
         }
-        let txs = response.get("Transactions").ok_or(Error::HubbleError)?;
-        let tx_array = txs.as_array().ok_or(Error::HubbleError)?;
+        let txs = response.get("Transactions").ok_or_else(|| {
+            Error::HubbleError(create_hubble_field_not_found_error(
+                "Transactions",
+                response,
+            ))
+        })?;
+        let tx_array = txs
+            .as_array()
+            .ok_or_else(|| Error::HubbleError(format!("Cannot parse `txs`: {} as array", txs)))?;
         for (i, tx) in tx_array.as_slice().iter().enumerate() {
-            let hash = tx.get("Hash").ok_or(Error::HubbleError)?;
-            let hash = H256::from_str(&hash.to_string())?;
-            println!("Comparing hash {} {}", i, hash);
+            let hash = tx.get("Hash").ok_or_else(|| {
+                Error::HubbleError(create_hubble_field_not_found_error("Hash", tx))
+            })?;
+            let hash = H256::from_str(&hash.to_string().replace("\"", ""))?;
             if hash == *tx_hash {
-                println!("Found {}", hash);
                 return Ok(i.try_into()?);
             }
         }
