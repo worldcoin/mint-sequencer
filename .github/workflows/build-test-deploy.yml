@@ -309,9 +309,9 @@ jobs:
           --docker-username="${{ github.repository_owner }}"
           --docker-password="${{ secrets.GITHUB_TOKEN }}"
       - name: Helm install
-        run: helm upgrade --install signup-sequencer -n signup-sequencer ./deploy
-          --atomic
-          --timeout 60s
+        run: helm upgrade ${{ github.event.repository.name }} ./deploy
+          --install --atomic --timeout 60s
+          --namespace ${{ github.event.repository.name }}
           --set image.tag="${{ github.sha }}"
           --set image.pullSecret=ghcr-secret
           --set environment=stage
@@ -346,9 +346,9 @@ jobs:
           --docker-username="${{ github.repository_owner }}"
           --docker-password="${{ secrets.GITHUB_TOKEN }}"
       - name: Helm install
-        run: helm upgrade --install signup-sequencer -n signup-sequencer ./deploy
-          --atomic
-          --timeout 60s
+        run: helm upgrade ${{ github.event.repository.name }} ./deploy
+          --install --atomic --timeout 60s
+          --namespace ${{ github.event.repository.name }}
           --set image.tag="${{ github.sha }}"
           --set image.pullSecret=ghcr-secret
           --set environment=stage
