@@ -8,12 +8,13 @@ env:
   # Skip incremental build and debug info generation in CI
   CARGO_INCREMENTAL: 0
   CARGO_PROFILE_DEV_DEBUG: 0
+  IMAGE_ID: ghcr.io/${{ github.repository }}:${{ github.sha }}
 
 jobs:
   accept:
     name: Accept
     runs-on: ubuntu-latest
-    needs: [lint, test, build_and_push, image_manifest, helm_lint, helm_test]
+    needs: [lint, test, build_and_push, image_manifest, snyk_scan_container, helm_lint, helm_test]
     steps:
       - name: Accept
         run: true
@@ -106,7 +107,7 @@ jobs:
                   cargo test --locked --all-features --all-targets
                     --no-fail-fast --no-run --message-format=json
                     | jq -r "select(.profile.test == true) | .filenames[]"
-                    | grep -v dSYM - 
+                    | grep -v dSYM -
                 )
                 target/debug/doctestbins/*/rust_out;
               do
@@ -189,13 +190,13 @@ jobs:
         with:
           context: .
           platforms: linux/${{ matrix.platform }}
-          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}-${{ matrix.platform }}
+          tags: ${{ env.IMAGE_ID }}-${{ matrix.platform }}
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Test image
         run:
-          docker run --pull always --platform linux/${{ matrix.platform }} --rm ghcr.io/${{ github.repository }}:${{ github.sha }}-${{ matrix.platform }} --version
+          docker run --pull always --platform linux/${{ matrix.platform }} --rm $IMAGE_ID-${{ matrix.platform }} --version
 
   image_manifest:
     name: Image manifest
@@ -209,16 +210,32 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Create manifest
-        run: docker manifest create
-          ghcr.io/${{ github.repository }}:${{ github.sha }}
-          ghcr.io/${{ github.repository }}:${{ github.sha }}-amd64
-          ghcr.io/${{ github.repository }}:${{ github.sha }}-arm64
+        run: docker manifest create $IMAGE_ID{,-amd64,-arm64}
       - name: Inspect manifest
-        run: docker manifest inspect
-          ghcr.io/${{ github.repository }}:${{ github.sha }}
+        run: docker manifest inspect $IMAGE_ID
       - name: Push manifest
-        run: docker manifest push
-          ghcr.io/${{ github.repository }}:${{ github.sha }}
+        run: docker manifest push $IMAGE_ID
+
+  snyk_scan_container:
+    name: Snyk container scan
+    runs-on: ubuntu-latest
+    needs: [ image_manifest ]
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    steps:
+      - name: Set up Snyk
+        uses: snyk/actions/setup@master
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull image
+        run: docker pull $IMAGE_ID
+      - name: Snyk Scan
+        # TODO: $IMAGE_ID is a multi-platform manifest, does it scan all?
+        run: snyk container test $IMAGE_ID
 
   helm_lint:
     name: Lint helm chart
@@ -244,11 +261,18 @@ jobs:
         uses: actions/checkout@v2
       - name: Create kind cluster
         uses: helm/kind-action@v1.2.0
+      # TODO: Make package public
+      - name: Create pull secret for ghcr.io
+        run: kubectl create secret docker-registry ghcr-secret
+          --docker-server=ghcr.io
+          --docker-username="${{ github.repository_owner }}"
+          --docker-password="${{ secrets.GITHUB_TOKEN }}"
       - name: Test install deploy
-        run:
-          helm upgrade --install ${{ github.event.repository.name }} ./deploy
+        run: helm upgrade --install ${{ github.event.repository.name }} ./deploy
           --atomic --timeout 60s --debug
           --set image.tag=${{ github.sha }}-amd64
+          --set image.pullSecret=ghcr-secret
+          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
       - name: Describe pods
         if: always()
         run: kubectl describe pod
@@ -259,3 +283,73 @@ jobs:
           | tail -n +2
           | cut -f 1 -d ' '
           | xargs -L 1 kubectl logs
+
+  deploy-main-stage:
+    name: Deploy main to staging
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: [accept]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: ${{ secrets.AWS_STAGE_REGION }}
+          role-to-assume: ${{ secrets.AWS_STAGE_ROLE }}
+          role-duration-seconds: 900
+      - name: Connect to EKS cluster
+        run: aws eks update-kubeconfig
+          --region ${{ secrets.AWS_STAGE_REGION }}
+          --name ${{ secrets.AWS_STAGE_CLUSTER }}
+      # TODO: Make package public
+      - name: Create pull secret for ghcr.io
+        run: kubectl create secret docker-registry ghcr-secret
+          --docker-server=ghcr.io
+          --docker-username="${{ github.repository_owner }}"
+          --docker-password="${{ secrets.GITHUB_TOKEN }}"
+      - name: Helm install
+        run: helm upgrade --install signup-sequencer -n signup-sequencer ./deploy
+          --atomic
+          --timeout 60s
+          --set image.tag="${{ github.sha }}"
+          --set image.pullSecret=ghcr-secret
+          --set environment=stage
+          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
+
+  deploy-stage-manual:
+    name: Manual deploy to staging
+    runs-on: ubuntu-latest
+    needs: [image_manifest]
+    environment: stage-manual
+    permissions:
+      id-token: write
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: ${{ secrets.AWS_STAGE_REGION }}
+          role-to-assume: ${{ secrets.AWS_STAGE_ROLE }}
+          role-duration-seconds: 900
+      - name: Connect to EKS cluster
+        run: aws eks update-kubeconfig
+          --region ${{ secrets.AWS_STAGE_REGION }}
+          --name ${{ secrets.AWS_STAGE_CLUSTER }}
+      # TODO: Make package public
+      - name: Create pull secret for ghcr.io
+        run: kubectl create secret docker-registry ghcr-secret
+          --docker-server=ghcr.io
+          --docker-username="${{ github.repository_owner }}"
+          --docker-password="${{ secrets.GITHUB_TOKEN }}"
+      - name: Helm install
+        run: helm upgrade --install signup-sequencer -n signup-sequencer ./deploy
+          --atomic
+          --timeout 60s
+          --set image.tag="${{ github.sha }}"
+          --set image.pullSecret=ghcr-secret
+          --set environment=stage
+          --set env.ETHEREUM_PROVIDER="${{ secrets.ALCHEMY_GOERLI_RPC_ENDPOINT }}"
