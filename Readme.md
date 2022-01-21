@@ -2,9 +2,9 @@
 
 ![lines of code](https://img.shields.io/tokei/lines/github/worldcoin/mint-sequencer)
 [![dependency status](https://deps.rs/repo/github/worldcoin/mint-sequencer/status.svg)](https://deps.rs/repo/github/worldcoin/mint-sequencer)
-[![codecov](https://codecov.io/gh/worldcoin/mint-sequencer/branch/main/graph/badge.svg?token=WBPZ9U4TTO)](https://codecov.io/gh/worldcoin/mint-sequencer)
-[![ci](https://github.com/worldcoin/mint-sequencer/actions/workflows/ci.yml/badge.svg)](https://github.com/worldcoin/mint-sequencer/actions/workflows/ci.yml)
-[![cd](https://github.com/worldcoin/mint-sequencer/actions/workflows/cd.yml/badge.svg)](https://github.com/worldcoin/mint-sequencer/actions/workflows/cd.yml)
+[![codecov](https://codecov.io/gh/worldcoin/mint-sequencer/branch/main/graph/badge.svg?token=ZHQNVFAFG8)](https://codecov.io/gh/worldcoin/mint-sequencer)
+[![Build, Test & Deploy](https://github.com/worldcoin/mint-sequencer/actions/workflows/build-test-deploy.yml/badge.svg)](https://github.com/worldcoin/mint-sequencer/actions/workflows/build-test-deploy.yml)
+
 
 ## Hints
 
