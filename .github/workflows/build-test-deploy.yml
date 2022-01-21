@@ -290,6 +290,10 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: [accept]
     environment: stage
+    permissions:
+      id-token: write
+      contents: read
+      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@v2
