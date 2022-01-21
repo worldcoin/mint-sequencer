@@ -1,4 +1,3 @@
-use chrono::Utc;
 use eyre::{bail, eyre, Result, WrapErr as _};
 use std::{
     env::{var, VarError},
@@ -6,6 +5,7 @@ use std::{
     path::Path,
     process::Command,
 };
+use time::OffsetDateTime;
 
 fn main() -> Result<()> {
     let commit = rerun_if_git_changes().unwrap_or_else(|e| {
@@ -35,7 +35,7 @@ fn main() -> Result<()> {
         })
         .trim_matches('\'')
     );
-    println!("cargo:rustc-env=BUILD_DATE={}", Utc::today().naive_utc());
+    println!("cargo:rustc-env=BUILD_DATE={}", OffsetDateTime::now_utc().date());
     println!(
         "cargo:rustc-env=TARGET={}",
         var("TARGET").wrap_err("Fetching environment variable TARGET")?
