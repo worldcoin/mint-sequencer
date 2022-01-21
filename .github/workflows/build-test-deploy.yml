@@ -261,6 +261,8 @@ jobs:
         uses: actions/checkout@v2
       - name: Create kind cluster
         uses: helm/kind-action@v1.2.0
+      - name: Create namespace
+        run: kubectl create namespace "${{ github.event.repository.name }}"
       # TODO: Make package public
       - name: Create pull secret for ghcr.io
         run: kubectl create secret docker-registry ghcr-secret
