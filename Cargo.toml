@@ -66,7 +66,7 @@ proptest = { version = "1.0" }
 
 [build-dependencies]
 eyre = "0.6"
-time = { version = "0.3.5", features = [ "formatting", "parsing" ] }
+time = { version = "0.3.7", features = [ "formatting", "parsing" ] }
 
 [profile.release]
 codegen-units = 1
