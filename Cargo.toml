@@ -61,7 +61,7 @@ url = "2.2"
 zkp-u256 = "0.2"
 
 [dev-dependencies]
-pretty_assertions = "1.0"
+pretty_assertions = "1.1"
 proptest = { version = "1.0" }
 
 [build-dependencies]
