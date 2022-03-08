@@ -57,7 +57,8 @@ pub struct CreateToTransferRequest {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SubmitProofRequest {
+pub struct SignalRequest {
+    group_id:        usize,
     pub_key:         BLSPubKey,
     proof:           CommitmentProof,
     nullifiers_hash: U256,
@@ -138,11 +139,12 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
             })
             .await
         }
-        (&Method::POST, "/submitProof") => {
-            json_middleware(request, |request: SubmitProofRequest| {
+        (&Method::POST, "/signal") => {
+            json_middleware(request, |request: SignalRequest| {
                 let app = app.clone();
                 async move {
-                    app.submit_proof(
+                    app.signal(
+                        request.group_id,
                         &request.pub_key,
                         request.proof,
                         request.nullifiers_hash,

@@ -43,8 +43,9 @@ impl App {
     }
 
     /// # Errors
-    pub async fn submit_proof(
+    pub async fn signal(
         &self,
+        _group_id: usize,
         pub_key: &BLSPubKey,
         proof: CommitmentProof,
         nullifiers_hash: U256,
