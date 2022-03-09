@@ -5,6 +5,7 @@ use crate::{
 };
 use ethers::prelude::{Bytes, H256, U256};
 use eyre::Result as EyreResult;
+use semaphore::{protocol::{SnarkFileConfig, verify_proof, generate_nullifier_hash, generate_proof}, hash::Hash, poseidon_tree::PoseidonTree, identity::Identity};
 use structopt::StructOpt;
 
 #[derive(Clone, Debug, PartialEq, StructOpt)]
@@ -20,6 +21,7 @@ pub struct Options {
 pub struct App {
     ethereum: Ethereum,
     hubble:   Hubble,
+    config: SnarkFileConfig,
 }
 
 impl App {
@@ -29,8 +31,12 @@ impl App {
     pub async fn new(options: Options) -> EyreResult<Self> {
         let ethereum = Ethereum::new(options.ethereum).await?;
         let hubble = Hubble::new(options.hubble).await?;
+        let config = SnarkFileConfig {
+            zkey: "./semaphore/build/snark/semaphore_final.zkey".to_string(),
+            wasm: "./semaphore/build/snark/semaphore.wasm".to_string(),
+        };
 
-        Ok(Self { ethereum, hubble })
+        Ok(Self { ethereum, hubble, config })
     }
 
     /// # Errors
@@ -75,14 +81,45 @@ impl App {
         _nullifier_hash: U256,
         _proof: CommitmentProof,
     ) -> Result<bool, ServerError> {
-        // verify_proof()
-        //     config: &SnarkFileConfig,
-        //     root: &BigInt,
-        //     nullifier_hash: &BigInt,
-        //     signal: &[u8],
-        //     external_nullifier: &[u8],
-        //     proof: &Proof<Bn<Parameters>>,
+        let id = Identity::new(b"secret");
 
-        Ok(true)
+        const LEAF: Hash = Hash::from_bytes_be([0u8; 32]);
+
+        let mut tree = PoseidonTree::new(21, LEAF);
+        let (_, leaf) = id.commitment().to_bytes_be();
+        tree.set(0, leaf.into());
+
+        let merkle_proof = tree.proof(0).expect("proof should exist");
+        let root = tree.root();
+
+        // change signal and external_nullifier here
+        let signal = "xxx".as_bytes();
+        let external_nullifier = "appId".as_bytes();
+
+        let nullifier_hash = generate_nullifier_hash(&id, external_nullifier);
+
+        let proof =
+            generate_proof(&self.config, &id, &merkle_proof, external_nullifier, signal).unwrap();
+
+        let success = verify_proof(
+            &self.config,
+            &root.into(),
+            &nullifier_hash,
+            signal,
+            external_nullifier,
+            &proof,
+        )
+        .unwrap();
+
+        // verify_proof(
+        //     &self.config,
+        //     root.into(),
+        //     nullifier_hash,
+        //     signal,
+        //     external_nullifier,
+        //     proof,
+        // );
+
+        Ok(success)
     }
 }
