@@ -3,7 +3,7 @@ use crate::{
     hubble::{self, Hubble},
     server::Error as ServerError,
 };
-use ethers::prelude::{H256, U256};
+use ethers::prelude::{Bytes, H256, U256};
 use eyre::Result as EyreResult;
 use structopt::StructOpt;
 
@@ -43,7 +43,7 @@ impl App {
     }
 
     /// # Errors
-    pub async fn signal(
+    pub async fn submit_proof(
         &self,
         _group_id: usize,
         pub_key: &BLSPubKey,
@@ -64,5 +64,25 @@ impl App {
             .await?;
 
         Ok(())
+    }
+
+    /// # Errors
+    pub async fn signal(
+        &self,
+        _group_id: usize,
+        _external_nullifier: U256,
+        _signal: &Bytes,
+        _nullifier_hash: U256,
+        _proof: CommitmentProof,
+    ) -> Result<bool, ServerError> {
+        // verify_proof()
+        //     config: &SnarkFileConfig,
+        //     root: &BigInt,
+        //     nullifier_hash: &BigInt,
+        //     signal: &[u8],
+        //     external_nullifier: &[u8],
+        //     proof: &Proof<Bn<Parameters>>,
+
+        Ok(true)
     }
 }

@@ -3,7 +3,7 @@ use crate::{
     ethereum::{BLSPubKey, CommitmentProof},
 };
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
-use ethers::prelude::{H256, U256};
+use ethers::prelude::{Bytes, H256, U256};
 use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
 use futures::Future;
 use hyper::{
@@ -57,12 +57,22 @@ pub struct CreateToTransferRequest {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SignalRequest {
+pub struct SubmitProofRequest {
     group_id:        usize,
     pub_key:         BLSPubKey,
     proof:           CommitmentProof,
     nullifiers_hash: U256,
     tx_hash:         H256,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignalRequest {
+    group_id:           usize,
+    external_nullifier: U256,
+    signal:             Bytes,
+    nullifier_hash:     U256,
+    proof:              CommitmentProof,
 }
 
 #[derive(Debug, Error)]
@@ -139,16 +149,32 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
             })
             .await
         }
+        (&Method::POST, "/submitProof") => {
+            json_middleware(request, |request: SubmitProofRequest| {
+                let app = app.clone();
+                async move {
+                    app.submit_proof(
+                        request.group_id,
+                        &request.pub_key,
+                        request.proof,
+                        request.nullifiers_hash,
+                        &request.tx_hash,
+                    )
+                    .await
+                }
+            })
+            .await
+        }
         (&Method::POST, "/signal") => {
             json_middleware(request, |request: SignalRequest| {
                 let app = app.clone();
                 async move {
                     app.signal(
                         request.group_id,
-                        &request.pub_key,
+                        request.external_nullifier,
+                        &request.signal,
+                        request.nullifier_hash,
                         request.proof,
-                        request.nullifiers_hash,
-                        &request.tx_hash,
                     )
                     .await
                 }

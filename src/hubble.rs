@@ -198,7 +198,7 @@ impl Hubble {
                 ))
             })?,
         );
-        let batch_id = batch_id.to_string().replace("\"", "").parse::<u64>()?;
+        let batch_id = batch_id.to_string().replace('\"', "").parse::<u64>()?;
         let commitment_idx = commitment_idx.as_u64().ok_or_else(|| {
             Error::HubbleError(format!(
                 "Cannot parse `commitment_idx`: {} as u64",
@@ -256,7 +256,7 @@ impl Hubble {
             let hash = tx.get("Hash").ok_or_else(|| {
                 Error::HubbleError(create_hubble_field_not_found_error("Hash", tx))
             })?;
-            let hash = H256::from_str(&hash.to_string().replace("\"", ""))?;
+            let hash = H256::from_str(&hash.to_string().replace('\"', ""))?;
             if hash == *tx_hash {
                 return Ok(i.try_into()?);
             }
