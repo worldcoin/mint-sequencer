@@ -25,6 +25,7 @@ use thiserror::Error;
 use tokio::sync::broadcast;
 use tracing::{error, info, trace};
 use url::{Host, Url};
+use semaphore::hash::Hash;
 
 #[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
@@ -70,8 +71,8 @@ pub struct SubmitProofRequest {
 pub struct SignalRequest {
     group_id:           usize,
     external_nullifier: U256,
-    signal:             Bytes,
-    nullifier_hash:     U256,
+    signal:             U256,
+    nullifier_hash:     Hash,
     proof:              CommitmentProof,
 }
 
@@ -172,7 +173,7 @@ async fn route(request: Request<Body>, app: Arc<App>) -> Result<Response<Body>, 
                     app.signal(
                         request.group_id,
                         request.external_nullifier,
-                        &request.signal,
+                        request.signal,
                         request.nullifier_hash,
                         request.proof,
                     )

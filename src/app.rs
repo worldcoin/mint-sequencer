@@ -3,7 +3,7 @@ use crate::{
     hubble::{self, Hubble},
     server::Error as ServerError,
 };
-use ethers::prelude::{Bytes, H256, U256};
+use ethers::{prelude::{Bytes, H256, U256}, utils::keccak256};
 use eyre::Result as EyreResult;
 use semaphore::{protocol::{SnarkFileConfig, verify_proof, generate_nullifier_hash, generate_proof}, hash::Hash, poseidon_tree::PoseidonTree, identity::Identity};
 use structopt::StructOpt;
@@ -76,9 +76,9 @@ impl App {
     pub async fn signal(
         &self,
         _group_id: usize,
-        _external_nullifier: U256,
-        _signal: &Bytes,
-        _nullifier_hash: U256,
+        external_nullifier: U256,
+        signal: U256,
+        nullifier_hash: Hash,
         _proof: CommitmentProof,
     ) -> Result<bool, ServerError> {
         let id = Identity::new(b"secret");
@@ -92,34 +92,38 @@ impl App {
         let merkle_proof = tree.proof(0).expect("proof should exist");
         let root = tree.root();
 
-        // change signal and external_nullifier here
-        let signal = "xxx".as_bytes();
-        let external_nullifier = "appId".as_bytes();
+        let signal_bytes: &mut [u8] = &mut [0; 32];
+        signal.to_big_endian(signal_bytes);
 
-        let nullifier_hash = generate_nullifier_hash(&id, external_nullifier);
+        let external_nullifier_bytes: &mut [u8] = &mut [0; 32];
+        external_nullifier.to_big_endian(external_nullifier_bytes);
 
+        // TODO: semaphore-rs throwing some error related to regalloc
         let proof =
-            generate_proof(&self.config, &id, &merkle_proof, external_nullifier, signal).unwrap();
+            generate_proof(&self.config, &id, &merkle_proof, external_nullifier_bytes, signal_bytes).unwrap();
+
+        // let proof: Bn<Parameters> = _proof.map(|x| x.into());
 
         let success = verify_proof(
             &self.config,
             &root.into(),
-            &nullifier_hash,
-            signal,
-            external_nullifier,
+            &nullifier_hash.into(),
+            signal_bytes,
+            external_nullifier_bytes,
             &proof,
         )
         .unwrap();
+        Ok(true)
 
         // verify_proof(
         //     &self.config,
         //     root.into(),
         //     nullifier_hash,
         //     signal,
-        //     external_nullifier,
+        //     external_nullifier_bytes,
         //     proof,
         // );
 
-        Ok(success)
+        // Ok(success)
     }
 }
