@@ -5,7 +5,7 @@ use crate::{
 };
 use ethers::{prelude::{Bytes, H256, U256}, utils::keccak256};
 use eyre::Result as EyreResult;
-use semaphore::{protocol::{SnarkFileConfig, verify_proof, generate_nullifier_hash, generate_proof}, hash::Hash, poseidon_tree::PoseidonTree, identity::Identity};
+use semaphore::{protocol::{SnarkFileConfig, verify_proof, generate_nullifier_hash, generate_proof, hash_external_nullifier}, hash::Hash, poseidon_tree::PoseidonTree, identity::Identity};
 use structopt::StructOpt;
 
 #[derive(Clone, Debug, PartialEq, StructOpt)]
@@ -32,8 +32,8 @@ impl App {
         let ethereum = Ethereum::new(options.ethereum).await?;
         let hubble = Hubble::new(options.hubble).await?;
         let config = SnarkFileConfig {
-            zkey: "./semaphore/build/snark/semaphore_final.zkey".to_string(),
-            wasm: "./semaphore/build/snark/semaphore.wasm".to_string(),
+            zkey: "./build/snark/semaphore_final.zkey".to_string(),
+            wasm: "./build/snark/semaphore.wasm".to_string(),
         };
 
         Ok(Self { ethereum, hubble, config })
@@ -98,21 +98,36 @@ impl App {
         let external_nullifier_bytes: &mut [u8] = &mut [0; 32];
         external_nullifier.to_big_endian(external_nullifier_bytes);
 
-        // TODO: semaphore-rs throwing some error related to regalloc
+        // change signal and external_nullifier here
+        let signal = "xxx".as_bytes();
+        let external_nullifier = "appId".as_bytes();
+
+        let external_nullifier_hash = hash_external_nullifier(external_nullifier);
+        let nullifier_hash = generate_nullifier_hash(&id, &external_nullifier_hash);
+
+        let config = SnarkFileConfig {
+            zkey: "./build/snark/semaphore_final.zkey".to_string(),
+            wasm: "./build/snark/semaphore.wasm".to_string(),
+        };
+
         let proof =
-            generate_proof(&self.config, &id, &merkle_proof, external_nullifier_bytes, signal_bytes).unwrap();
+        generate_proof(&config, &id, &merkle_proof, &external_nullifier_hash, signal).unwrap();
 
-        // let proof: Bn<Parameters> = _proof.map(|x| x.into());
+        // // TODO: semaphore-rs throwing some error related to regalloc
+        // let proof =
+        //     generate_proof(&self.config, &id, &merkle_proof, external_nullifier_bytes, signal_bytes).unwrap();
 
-        let success = verify_proof(
-            &self.config,
-            &root.into(),
-            &nullifier_hash.into(),
-            signal_bytes,
-            external_nullifier_bytes,
-            &proof,
-        )
-        .unwrap();
+        // // let proof: Bn<Parameters> = _proof.map(|x| x.into());
+
+        // let success = verify_proof(
+        //     &self.config,
+        //     &root.into(),
+        //     &nullifier_hash.into(),
+        //     signal_bytes,
+        //     external_nullifier_bytes,
+        //     &proof,
+        // )
+        // .unwrap();
         Ok(true)
 
         // verify_proof(
