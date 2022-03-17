@@ -14,6 +14,7 @@ use hyper::{
 };
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter_vec, IntCounterVec};
+use semaphore::hash::Hash;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -25,7 +26,6 @@ use thiserror::Error;
 use tokio::sync::broadcast;
 use tracing::{error, info, trace};
 use url::{Host, Url};
-use semaphore::hash::Hash;
 
 #[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
@@ -59,21 +59,21 @@ pub struct CreateToTransferRequest {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubmitProofRequest {
-    group_id:        usize,
-    pub_key:         BLSPubKey,
-    proof:           CommitmentProof,
+    group_id: usize,
+    pub_key: BLSPubKey,
+    proof: CommitmentProof,
     nullifiers_hash: U256,
-    tx_hash:         H256,
+    tx_hash: H256,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SignalRequest {
-    group_id:           usize,
+    group_id: usize,
     external_nullifier: U256,
-    signal:             U256,
-    nullifier_hash:     Hash,
-    proof:              CommitmentProof,
+    signal: U256,
+    nullifier_hash: Hash,
+    proof: CommitmentProof,
 }
 
 #[derive(Debug, Error)]

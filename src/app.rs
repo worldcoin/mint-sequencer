@@ -3,12 +3,20 @@ use crate::{
     hubble::{self, Hubble},
     server::Error as ServerError,
 };
-use ethers::{prelude::{Bytes, H256, U256}, utils::keccak256};
+use ethers::{
+    prelude::{Bytes, H256, U256},
+    utils::keccak256,
+};
 use eyre::Result as EyreResult;
-use semaphore::{protocol::{verify_proof, generate_nullifier_hash, generate_proof, hash_external_nullifier}, hash::Hash, poseidon_tree::PoseidonTree, identity::Identity};
-use structopt::StructOpt;
-use num_bigint::{BigInt, Sign};
 use hex_literal::hex;
+use num_bigint::{BigInt, Sign};
+use semaphore::{
+    hash::Hash,
+    identity::Identity,
+    poseidon_tree::PoseidonTree,
+    protocol::{generate_nullifier_hash, generate_proof, hash_external_nullifier, verify_proof},
+};
+use structopt::StructOpt;
 
 #[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
@@ -22,7 +30,7 @@ pub struct Options {
 #[allow(dead_code)]
 pub struct App {
     ethereum: Ethereum,
-    hubble:   Hubble,
+    hubble: Hubble,
 }
 
 impl App {
@@ -75,8 +83,8 @@ impl App {
         _group_id: usize,
         external_nullifier: U256,
         signal: U256,
-        nullifier_hash: Hash,
-        proof: CommitmentProof,
+        _nullifier_hash: Hash,
+        _proof: CommitmentProof,
     ) -> Result<bool, ServerError> {
         const LEAF: Hash = Hash::from_bytes_be(hex!(
             "0000000000000000000000000000000000000000000000000000000000000000"
@@ -97,10 +105,8 @@ impl App {
 
         let external_nullifier_hash = hash_external_nullifier(external_nullifier_bytes);
 
-
         let signal_bytes: &mut [u8] = &mut [0; 32];
         signal.to_big_endian(signal_bytes);
-
 
         // TODO
         let nullifier_hash = generate_nullifier_hash(&id, external_nullifier_hash);
@@ -108,12 +114,18 @@ impl App {
         let external_nullifier_hash = hash_external_nullifier(external_nullifier_bytes);
 
         // TODO remove
-        let proof = generate_proof(&id, &merkle_proof, external_nullifier_bytes, signal_bytes).unwrap();
+        let proof =
+            generate_proof(&id, &merkle_proof, external_nullifier_bytes, signal_bytes).unwrap();
         println!("Proof {:?}", proof);
 
-
-        let success =
-            verify_proof(root, nullifier_hash, signal_bytes, external_nullifier_bytes, &proof).unwrap();
+        let success = verify_proof(
+            root,
+            nullifier_hash,
+            signal_bytes,
+            external_nullifier_bytes,
+            &proof,
+        )
+        .unwrap();
 
         assert!(success);
         println!("Success {}", success);

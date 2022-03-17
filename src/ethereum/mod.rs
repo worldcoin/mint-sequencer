@@ -68,11 +68,11 @@ impl_fixed_hash_serde!(BLSPubKey, 128);
 
 #[allow(dead_code)]
 pub struct Ethereum {
-    provider:           Arc<ProviderStack>,
-    semaphore:          Semaphore<ProviderStack>,
-    wallet_claims:      WalletClaims<ProviderStack>,
+    provider: Arc<ProviderStack>,
+    semaphore: Semaphore<ProviderStack>,
+    wallet_claims: WalletClaims<ProviderStack>,
     external_nullifier: U256,
-    eip1559:            bool,
+    eip1559: bool,
 }
 
 impl Ethereum {

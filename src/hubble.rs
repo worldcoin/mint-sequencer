@@ -25,31 +25,31 @@ pub struct Options {
 }
 
 pub struct Hubble {
-    client:         Client,
-    commander_url:  Url,
+    client: Client,
+    commander_url: Url,
     airdrop_amount: u32,
-    from_state_id:  u32,
+    from_state_id: u32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CommitmentDetails {
-    pub batch_id:       U256,
+    pub batch_id: U256,
     pub commitment_idx: U256,
-    pub transfer_idx:   U256,
+    pub transfer_idx: U256,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UserState {
     #[serde(rename = "StateID")]
-    state_id:   u32,
+    state_id: u32,
     #[serde(rename = "PubKeyID")]
     pub_key_id: u32,
     #[serde(rename = "TokenID")]
-    token_id:   String,
+    token_id: String,
     #[serde(rename = "Balance")]
-    balance:    U256,
+    balance: U256,
     #[serde(rename = "Nonce")]
-    nonce:      String,
+    nonce: String,
 }
 
 impl Hubble {
@@ -143,9 +143,9 @@ impl Hubble {
             .await?;
 
         Ok(CommitmentDetails {
-            batch_id:       U256::from(batch_id),
+            batch_id: U256::from(batch_id),
             commitment_idx: U256::from(commitment_idx),
-            transfer_idx:   U256::from(transfer_idx),
+            transfer_idx: U256::from(transfer_idx),
         })
     }
 

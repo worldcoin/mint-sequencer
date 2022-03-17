@@ -21,12 +21,10 @@ fn main() -> Result<()> {
         })
     );
     let build_date = OffsetDateTime::now_utc();
-    let commit_date = env_or_cmd("COMMIT_DATE", &[
-        "git",
-        "log",
-        "-n1",
-        "--pretty=format:'%aI'",
-    ])
+    let commit_date = env_or_cmd(
+        "COMMIT_DATE",
+        &["git", "log", "-n1", "--pretty=format:'%aI'"],
+    )
     .and_then(|str| Ok(OffsetDateTime::parse(str.trim_matches('\''), &Rfc3339)?))
     .unwrap_or_else(|e| {
         eprintln!("Warning: {}", e);
