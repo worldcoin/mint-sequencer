@@ -5,8 +5,10 @@ use crate::{
 };
 use ethers::{prelude::{Bytes, H256, U256}, utils::keccak256};
 use eyre::Result as EyreResult;
-use semaphore::{protocol::{SnarkFileConfig, verify_proof, generate_nullifier_hash, generate_proof}, hash::Hash, poseidon_tree::PoseidonTree, identity::Identity};
+use semaphore::{protocol::{verify_proof, generate_nullifier_hash, generate_proof, hash_external_nullifier}, hash::Hash, poseidon_tree::PoseidonTree, identity::Identity};
 use structopt::StructOpt;
+use num_bigint::{BigInt, Sign};
+use hex_literal::hex;
 
 #[derive(Clone, Debug, PartialEq, StructOpt)]
 pub struct Options {
@@ -21,7 +23,6 @@ pub struct Options {
 pub struct App {
     ethereum: Ethereum,
     hubble:   Hubble,
-    config: SnarkFileConfig,
 }
 
 impl App {
@@ -31,12 +32,8 @@ impl App {
     pub async fn new(options: Options) -> EyreResult<Self> {
         let ethereum = Ethereum::new(options.ethereum).await?;
         let hubble = Hubble::new(options.hubble).await?;
-        let config = SnarkFileConfig {
-            zkey: "./semaphore/build/snark/semaphore_final.zkey".to_string(),
-            wasm: "./semaphore/build/snark/semaphore.wasm".to_string(),
-        };
 
-        Ok(Self { ethereum, hubble, config })
+        Ok(Self { ethereum, hubble })
     }
 
     /// # Errors
@@ -79,40 +76,47 @@ impl App {
         external_nullifier: U256,
         signal: U256,
         nullifier_hash: Hash,
-        _proof: CommitmentProof,
+        proof: CommitmentProof,
     ) -> Result<bool, ServerError> {
-        let id = Identity::new(b"secret");
+        const LEAF: Hash = Hash::from_bytes_be(hex!(
+            "0000000000000000000000000000000000000000000000000000000000000000"
+        ));
 
-        const LEAF: Hash = Hash::from_bytes_be([0u8; 32]);
+        // generate identity
+        let id = Identity::new(b"hello");
 
+        // generate merkle tree
         let mut tree = PoseidonTree::new(21, LEAF);
-        let (_, leaf) = id.commitment().to_bytes_be();
-        tree.set(0, leaf.into());
+        tree.set(0, id.commitment().into());
 
         let merkle_proof = tree.proof(0).expect("proof should exist");
-        let root = tree.root();
-
-        let signal_bytes: &mut [u8] = &mut [0; 32];
-        signal.to_big_endian(signal_bytes);
+        let root = tree.root().into();
 
         let external_nullifier_bytes: &mut [u8] = &mut [0; 32];
         external_nullifier.to_big_endian(external_nullifier_bytes);
 
-        // TODO: semaphore-rs throwing some error related to regalloc
-        let proof =
-            generate_proof(&self.config, &id, &merkle_proof, external_nullifier_bytes, signal_bytes).unwrap();
+        let external_nullifier_hash = hash_external_nullifier(external_nullifier_bytes);
 
-        // let proof: Bn<Parameters> = _proof.map(|x| x.into());
 
-        let success = verify_proof(
-            &self.config,
-            &root.into(),
-            &nullifier_hash.into(),
-            signal_bytes,
-            external_nullifier_bytes,
-            &proof,
-        )
-        .unwrap();
+        let signal_bytes: &mut [u8] = &mut [0; 32];
+        signal.to_big_endian(signal_bytes);
+
+
+        // TODO
+        let nullifier_hash = generate_nullifier_hash(&id, external_nullifier_hash);
+
+        let external_nullifier_hash = hash_external_nullifier(external_nullifier_bytes);
+
+        // TODO remove
+        let proof = generate_proof(&id, &merkle_proof, external_nullifier_bytes, signal_bytes).unwrap();
+        println!("Proof {:?}", proof);
+
+
+        let success =
+            verify_proof(root, nullifier_hash, signal_bytes, external_nullifier_bytes, &proof).unwrap();
+
+        assert!(success);
+        println!("Success {}", success);
         Ok(true)
 
         // verify_proof(
