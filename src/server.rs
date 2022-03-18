@@ -224,7 +224,6 @@ pub async fn main(
 
     let listener = TcpListener::bind(&addr)?;
 
-    // app.signal(0, U256::one(), U256::one(), Hash::from(U256::one()), [U256::one(); 8]).await?;
     bind_from_listener(app.clone(), listener, shutdown).await?;
 
     Ok(())

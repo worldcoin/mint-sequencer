@@ -50,7 +50,7 @@ proptest = { version = "1.0", optional = true }
 reqwest = "0.11.8"
 serde = "1.0"
 serde_json = "1.0"
-semaphore = { git = "https://github.com/worldcoin/semaphore-rs" }
+semaphore = { git = "https://github.com/worldcoin/semaphore-rs", rev = "73faeb6" }
 smallvec = { version = "^1.6.1", features = [ "serde" ] }
 structopt = "0.3"
 thiserror = "1.0"

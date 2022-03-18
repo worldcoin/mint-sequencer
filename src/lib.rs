@@ -3,6 +3,7 @@
 // TODO: `fixed-hash`'s `construct_fixed_hash` used in `ethereum/mod.rs` causes issues.
 // Explore ways to allow this within the macro without making it globally allowed.
 #![allow(clippy::expl_impl_clone_on_copy)]
+#![feature(const_fn_trait_bound)]
 
 pub mod app;
 mod ethereum;
