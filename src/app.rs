@@ -5,6 +5,13 @@ use crate::{
 };
 use ethers::prelude::{H256, U256};
 use eyre::Result as EyreResult;
+use hex_literal::hex;
+use semaphore::{
+    hash::Hash,
+    identity::Identity,
+    poseidon_tree::PoseidonTree,
+    protocol::{generate_nullifier_hash, generate_proof, hash_external_nullifier, verify_proof},
+};
 use structopt::StructOpt;
 
 #[derive(Clone, Debug, PartialEq, StructOpt)]
@@ -33,7 +40,7 @@ impl App {
         Ok(Self { ethereum, hubble })
     }
 
-    /// # Errors
+    #[allow(clippy::missing_errors_doc)]
     pub async fn send_create_to_transfer(
         &self,
         pub_key: &BLSPubKey,
@@ -42,9 +49,10 @@ impl App {
         Ok(tx_hash)
     }
 
-    /// # Errors
+    #[allow(clippy::missing_errors_doc)]
     pub async fn submit_proof(
         &self,
+        _group_id: usize,
         pub_key: &BLSPubKey,
         proof: CommitmentProof,
         nullifiers_hash: U256,
@@ -63,5 +71,72 @@ impl App {
             .await?;
 
         Ok(())
+    }
+
+    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+    pub async fn signal(
+        &self,
+        _group_id: usize,
+        external_nullifier: U256,
+        signal: U256,
+        _nullifier_hash: Hash,
+        _proof: CommitmentProof,
+    ) -> Result<bool, ServerError> {
+        const LEAF: Hash = Hash::from_bytes_be(hex!(
+            "0000000000000000000000000000000000000000000000000000000000000000"
+        ));
+
+        // generate identity
+        let id = Identity::new(b"hello");
+
+        // generate merkle tree
+        let mut tree = PoseidonTree::new(21, LEAF);
+        tree.set(0, id.commitment().into());
+
+        let merkle_proof = tree.proof(0).expect("proof should exist");
+        let root = tree.root().into();
+
+        let external_nullifier_bytes: &mut [u8] = &mut [0; 32];
+        external_nullifier.to_big_endian(external_nullifier_bytes);
+
+        let external_nullifier_hash = hash_external_nullifier(external_nullifier_bytes);
+
+        let signal_bytes: &mut [u8] = &mut [0; 32];
+        signal.to_big_endian(signal_bytes);
+
+        // TODO
+        let nullifier_hash = generate_nullifier_hash(&id, external_nullifier_hash);
+
+        // let external_nullifier_hash =
+        // hash_external_nullifier(external_nullifier_bytes);
+
+        // TODO remove
+        let proof =
+            generate_proof(&id, &merkle_proof, external_nullifier_bytes, signal_bytes).unwrap();
+        println!("Proof {:?}", proof);
+
+        let success = verify_proof(
+            root,
+            nullifier_hash,
+            signal_bytes,
+            external_nullifier_bytes,
+            &proof,
+        )
+        .unwrap();
+
+        assert!(success);
+        println!("Success {}", success);
+        Ok(true)
+
+        // verify_proof(
+        //     &self.config,
+        //     root.into(),
+        //     nullifier_hash,
+        //     signal,
+        //     external_nullifier_bytes,
+        //     proof,
+        // );
+
+        // Ok(success)
     }
 }
