@@ -122,15 +122,19 @@ impl Hubble {
             .await?;
         let json_body: Value = response.json().await?;
 
-        let tx_hash = if let Some(tx_hash) = json_body.get("result") {
-            Ok(tx_hash)
-        } else if let Some(error) = json_body.get("error") {
-            Err(Error::HubbleError(error.to_string()))
-        } else {
-            Err(Error::HubbleError(create_hubble_field_not_found_error(
-                "error", &json_body,
-            )))
-        }?;
+        let tx_hash = json_body.get("result").map_or_else(
+            || {
+                json_body.get("error").map_or_else(
+                    || {
+                        Err(Error::HubbleError(create_hubble_field_not_found_error(
+                            "error", &json_body,
+                        )))
+                    },
+                    |error| Err(Error::HubbleError(error.to_string())),
+                )
+            },
+            Ok,
+        )?;
 
         Ok(tx_hash.to_string())
     }

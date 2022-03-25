@@ -63,7 +63,7 @@ pub mod test {
     #[allow(clippy::eq_op)]
     fn test_with_proptest() {
         proptest!(|(a in 0..5, b in 0..5)| {
-            assert_eq!(a + b, b + a);
+            assert_eq!((a + b) as i32, (b + a) as i32);
         });
     }
 

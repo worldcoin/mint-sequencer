@@ -3,13 +3,9 @@ use crate::{
     hubble::{self, Hubble},
     server::Error as ServerError,
 };
-use ethers::{
-    prelude::{Bytes, H256, U256},
-    utils::keccak256,
-};
+use ethers::prelude::{H256, U256};
 use eyre::Result as EyreResult;
 use hex_literal::hex;
-use num_bigint::{BigInt, Sign};
 use semaphore::{
     hash::Hash,
     identity::Identity,
@@ -44,7 +40,7 @@ impl App {
         Ok(Self { ethereum, hubble })
     }
 
-    /// # Errors
+    #[allow(clippy::missing_errors_doc)]
     pub async fn send_create_to_transfer(
         &self,
         pub_key: &BLSPubKey,
@@ -53,7 +49,7 @@ impl App {
         Ok(tx_hash)
     }
 
-    /// # Errors
+    #[allow(clippy::missing_errors_doc)]
     pub async fn submit_proof(
         &self,
         _group_id: usize,
@@ -77,7 +73,7 @@ impl App {
         Ok(())
     }
 
-    /// # Errors
+    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn signal(
         &self,
         _group_id: usize,
@@ -111,7 +107,8 @@ impl App {
         // TODO
         let nullifier_hash = generate_nullifier_hash(&id, external_nullifier_hash);
 
-        let external_nullifier_hash = hash_external_nullifier(external_nullifier_bytes);
+        // let external_nullifier_hash =
+        // hash_external_nullifier(external_nullifier_bytes);
 
         // TODO remove
         let proof =

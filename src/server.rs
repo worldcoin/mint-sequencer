@@ -3,7 +3,7 @@ use crate::{
     ethereum::{BLSPubKey, CommitmentProof},
 };
 use ::prometheus::{opts, register_counter, register_histogram, Counter, Histogram};
-use ethers::prelude::{Bytes, H256, U256};
+use ethers::prelude::{H256, U256};
 use eyre::{bail, ensure, Error as EyreError, Result as EyreResult, WrapErr as _};
 use futures::Future;
 use hyper::{
