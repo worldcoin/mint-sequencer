@@ -25,7 +25,7 @@ static SIZE: Lazy<Histogram> = Lazy::new(|| {
 
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct Allocator<T: GlobalAlloc> {
-    inner: T,
+    inner:    T,
     metering: AtomicBool,
 }
 
@@ -34,7 +34,7 @@ pub struct Allocator<T: GlobalAlloc> {
 // #![feature(const_fn_trait_bound)] is stable.
 pub const fn new_std() -> Allocator<StdAlloc> {
     Allocator {
-        inner: StdAlloc,
+        inner:    StdAlloc,
         metering: AtomicBool::new(false),
     }
 }
@@ -42,7 +42,7 @@ pub const fn new_std() -> Allocator<StdAlloc> {
 #[cfg(feature = "mimalloc")]
 pub const fn new_mimalloc() -> Allocator<MiMalloc> {
     Allocator {
-        inner: MiMalloc,
+        inner:    MiMalloc,
         metering: AtomicBool::new(false),
     }
 }

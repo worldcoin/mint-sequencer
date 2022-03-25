@@ -30,7 +30,7 @@ pub struct Options {
 #[allow(dead_code)]
 pub struct App {
     ethereum: Ethereum,
-    hubble: Hubble,
+    hubble:   Hubble,
 }
 
 impl App {

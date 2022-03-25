@@ -95,13 +95,10 @@ pub mod test {
     fn test_parse_args() {
         let cmd = "arg0 -v --log-filter foo -vvv";
         let options = LogOptions::from_iter_safe(cmd.split(' ')).unwrap();
-        assert_eq!(
-            options,
-            LogOptions {
-                verbose: 4,
-                log_filter: "foo".to_owned(),
-                log_format: LogFormat::Pretty,
-            }
-        );
+        assert_eq!(options, LogOptions {
+            verbose:    4,
+            log_filter: "foo".to_owned(),
+            log_format: LogFormat::Pretty,
+        });
     }
 }

@@ -42,11 +42,11 @@ pub static ALLOCATOR: Allocator<allocator::MiMalloc> = allocator::new_mimalloc()
 #[derive(StructOpt)]
 struct Options {
     #[structopt(flatten)]
-    log: LogOptions,
+    log:            LogOptions,
     #[structopt(flatten)]
     pub prometheus: prometheus::Options,
     #[structopt(flatten)]
-    app: lib::Options,
+    app:            lib::Options,
 }
 
 fn main() -> EyreResult<()> {

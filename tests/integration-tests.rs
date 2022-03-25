@@ -80,7 +80,7 @@ async fn spawn_app(options: Options, shutdown: broadcast::Sender<()>) -> EyreRes
 
 #[derive(Deserialize, Serialize, Debug)]
 struct CompiledContract {
-    abi: Abi,
+    abi:      Abi,
     bytecode: String,
 }
 
